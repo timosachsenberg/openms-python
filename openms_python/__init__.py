@@ -19,6 +19,7 @@ from .py_msexperiment import Py_MSExperiment
 from .py_msspectrum import Py_MSSpectrum
 from .py_featuremap import Py_FeatureMap
 from .py_consensusmap import Py_ConsensusMap
+from .py_fasta import FastaWorkflow
 from .py_identifications import (
     ProteinIdentifications,
     PeptideIdentifications,
@@ -31,6 +32,7 @@ __all__ = [
     "Py_MSSpectrum",
     "Py_FeatureMap",
     "Py_ConsensusMap",
+    "FastaWorkflow",
     "ProteinIdentifications",
     "PeptideIdentifications",
     "Identifications",

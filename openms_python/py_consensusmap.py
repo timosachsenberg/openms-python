@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Union
+from typing import Dict, Iterable, Iterator, Optional, Union
 
+import pandas as pd
 import pyopenms as oms
 
 from ._io_utils import ensure_allowed_suffix, CONSENSUS_MAP_EXTENSIONS
@@ -92,6 +93,38 @@ class Py_ConsensusMap:
         ensure_allowed_suffix(filepath, CONSENSUS_MAP_EXTENSIONS, "ConsensusMap")
         oms.ConsensusXMLFile().store(str(filepath), self._consensus_map)
         return self
+
+    def to_quant_table(self, *, fill_value: float = 0.0) -> pd.DataFrame:
+        """Convert the consensus map into a tidy quantitation table."""
+
+        native = self._consensus_map
+        headers = native.getColumnHeaders()
+
+        column_names: Dict[int, str] = {}
+        for index, header in headers.items():
+            if header.label:
+                column_names[index] = str(header.label)
+            elif header.filename:
+                column_names[index] = Path(header.filename).stem
+            else:
+                column_names[index] = f"map_{index}"
+
+        rows = []
+        for feature in native:
+            row: Dict[str, Union[float, str]] = {
+                "rt": feature.getRT(),
+                "mz": feature.getMZ(),
+                "intensity": feature.getIntensity(),
+            }
+            values = {idx: fill_value for idx in column_names}
+            for handle in feature.getFeatureList():
+                idx = handle.getMapIndex()
+                values[idx] = handle.getIntensity()
+            for idx, name in column_names.items():
+                row[name] = values[idx]
+            rows.append(row)
+
+        return pd.DataFrame(rows)
 
     # ==================== Private Helpers ====================
 

@@ -199,6 +199,68 @@ class Identifications:
     def find_peptide_by_sequence(self, sequence: str) -> Optional[oms.PeptideIdentification]:
         return self.peptides.find_by_sequence(sequence)
 
+    # ==================== High-level helpers ====================
+
+    def filter_by_fdr(self, max_q_value: float = 0.01) -> "Identifications":
+        """Return a copy containing peptides that pass the q-value threshold.
+
+        The method runs the :class:`pyopenms.FalseDiscoveryRate` algorithm on
+        the peptide identifications and retains those whose ``q-value`` meta
+        value is less than or equal to ``max_q_value``.
+        """
+
+        if max_q_value < 0:
+            raise ValueError("max_q_value must be non-negative")
+
+        peptides = [oms.PeptideIdentification(peptide) for peptide in self.peptides.native]
+        if not peptides:
+            return Identifications(self.proteins.copy(), PeptideIdentifications())
+
+        scored_entries: List[tuple[oms.PeptideIdentification, float, str]] = []
+        for peptide in peptides:
+            hits = peptide.getHits()
+            if not hits:
+                continue
+            top = hits[0]
+            label = str(top.getMetaValue("target_decoy")) if top.metaValueExists("target_decoy") else "target"
+            score = float(top.getScore())
+            if peptide.isHigherScoreBetter():
+                score = -score
+            scored_entries.append((peptide, score, label))
+
+        if not scored_entries:
+            return Identifications(self.proteins.copy(), PeptideIdentifications())
+
+        scored_entries.sort(key=lambda entry: entry[1])
+        targets = 0
+        decoys = 0
+        fdr_values: List[float] = []
+        for _, _, label in scored_entries:
+            if label.lower().startswith("decoy"):
+                decoys += 1
+            else:
+                targets += 1
+            if targets == 0:
+                fdr_values.append(1.0)
+            else:
+                fdr_values.append(decoys / targets)
+
+        # Convert running FDR into monotonic q-values (BH procedure)
+        q_values = []
+        running_min = 1.0
+        for fdr in reversed(fdr_values):
+            running_min = min(running_min, fdr)
+            q_values.append(running_min)
+        q_values = list(reversed(q_values))
+
+        kept: List[oms.PeptideIdentification] = []
+        for (peptide, _, _), q_value in zip(scored_entries, q_values):
+            peptide.setMetaValue("q-value", q_value)
+            if q_value <= max_q_value:
+                kept.append(peptide)
+
+        return Identifications(self.proteins.copy(), kept)
+
     def peptides_for_protein(self, accession: str) -> PeptideIdentifications:
         """Return peptides that reference the provided protein accession."""
 

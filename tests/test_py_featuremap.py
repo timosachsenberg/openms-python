@@ -114,3 +114,19 @@ def test_py_featuremap_remove_and_delete():
 
     with pytest.raises(TypeError):
         del fmap[None]
+
+
+def test_py_featuremap_accepts_wrapped_features():
+    fmap = Py_FeatureMap()
+    feature = oms.Feature()
+    feature.setUniqueId(77)
+
+    class Wrapper:
+        def __init__(self, native):
+            self.native = native
+
+    fmap.append(Wrapper(feature))
+    assert fmap[0].getUniqueId() == 77
+
+    with pytest.raises(TypeError):
+        fmap.append(object())
