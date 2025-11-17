@@ -49,8 +49,25 @@ for spec in exp.ms1_spectra():
     print(f"RT: {spec.retention_time:.2f}s, mz: {spec.mz}, intens: {spec.intensity}")
 
 
-## or convert to pandas dataframe    
+## or convert to pandas dataframe
 df = spec.to_dataframe()  # Get peaks as DataFrame
+```
+
+### Stream very large mzML files
+
+When processing huge mzML files you often only need to work on one spectrum at
+a time. The helper `stream_mzml` wraps `pyopenms.stream_mzML` and yields
+`Py_MSSpectrum` objects so you get the same Pythonic conveniences without
+loading the entire file into memory:
+
+```python
+from openms_python import stream_mzml
+
+ms2_count = 0
+for spectrum in stream_mzml("large.mzML", ms_level=2):
+    ms2_count += 1
+
+print(f"Processed {ms2_count} MS2 spectra without loading the full file")
 ```
 
 ### Reading mzML Files
@@ -328,6 +345,7 @@ pip install -e ".[dev]"
 | Iterate MS1 | Manual loop + level check | `for spec in exp.ms1_spectra():` |
 | Peak data | `peaks = spec.get_peaks(); mz = peaks[0]` | `mz, intensity = spec.peaks` |
 | DataFrame | Not available | `df = exp.to_dataframe()` |
+| Stream large files | Custom consumer + `MzMLFile().transform(...)` | `for spec in stream_mzml(path): ...` |
 
 ## Contributing
 
