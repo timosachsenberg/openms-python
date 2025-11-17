@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 oms = pytest.importorskip("pyopenms")
@@ -116,3 +117,40 @@ def test_py_featuremap_remove_and_delete():
 
     with pytest.raises(TypeError):
         del fmap[None]
+
+
+def test_py_featuremap_dataframe_round_trip():
+    df = pd.DataFrame(
+        {
+            "unique_id": [101, 102],
+            "rt": [100.0, 101.0],
+            "mz": [400.0, 401.0],
+            "intensity": [1000.0, 2000.0],
+            "charge": [2, 3],
+            "width": [0.5, 0.6],
+            "overall_quality": [0.9, 0.8],
+            "annotation": ["feature_a", "feature_b"],
+        }
+    )
+
+    fmap = Py_FeatureMap.from_dataframe(df)
+    assert len(fmap) == 2
+    assert fmap[0].getUniqueId() == 101
+    assert fmap[0].getMetaValue("annotation") == "feature_a"
+
+    recreated = fmap.to_dataframe()
+    assert recreated.shape[0] == 2
+    for column in ["unique_id", "rt", "mz", "intensity", "charge", "width", "overall_quality"]:
+        assert column in recreated.columns
+    assert recreated["rt"].tolist() == [100.0, 101.0]
+    assert recreated["annotation"].tolist() == ["feature_a", "feature_b"]
+
+    alias = Py_FeatureMap.from_df(df)
+    assert len(alias) == 2
+
+
+def test_py_featuremap_from_dataframe_missing_columns():
+    df = pd.DataFrame({"rt": [1.0], "mz": [2.0]})
+
+    with pytest.raises(ValueError):
+        Py_FeatureMap.from_dataframe(df)

@@ -341,6 +341,21 @@ cons_map.append(cons_feature)
 del cons_map[-3:]
 ```
 
+```python
+# DataFrame round-trip
+df = feature_map.to_dataframe()
+df["mz"] += 0.01  # manipulate with pandas
+feature_map = Py_FeatureMap.from_dataframe(df)
+
+cons_df = cons_map.get_df()
+cons_df["quality"] = 0.95
+cons_map = Py_ConsensusMap.from_df(cons_df)
+
+peaks_df = exp.get_df()
+peaks_df["intensity"] *= 1.1
+exp = Py_MSExperiment.from_df(peaks_df)
+```
+
 Behind the scenes the wrappers copy the retained entries back into the
 underlying pyOpenMS container, preserving meta data while exposing the
 expected Python semantics. By contrast, pyOpenMS requires manually creating a

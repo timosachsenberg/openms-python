@@ -130,58 +130,52 @@ class Py_MSExperiment:
         return cls(exp)
     
     @classmethod
-    def from_dataframe(cls, 
-                       df: pd.DataFrame, 
-                       mz: str = 'mz',
-                       intensity: str = 'intensity',
-                       rt: str = 'retention_time', 
-                       ms_level: str = 'ms_level',
-                       native_id: str = 'native_id',
-                       spec_idx: str = 'spectrum_id') -> 'Py_MSExperiment':
-        """
-        Create MSExperiment from a pandas DataFrame.
-        
-        Args:
-            df: DataFrame with columns including mz, intensity, and grouping column
-            mz: Column name for m/z values (default: 'mz')
-            intensity: Column name for intensity values (default: 'intensity')
-            rt: Column name for retention time (default: 'retention_time')
-            level: Column name for MS level (default: 'ms_level')
-            native_id: Column name for native ID (default: 'native_id')
-            spec_idx: Column name for spectrum index/grouping (default: 'spectrum_id')
-            
-        Returns:
-            MSExperiment object
-            
-        Example:
-            >>> df = pd.DataFrame({
-            ...     'spectrum_id': [0, 0, 1, 1],
-            ...     'mz': [100, 200, 150, 250],
-            ...     'intensity': [50, 100, 75, 125],
-            ...     'retention_time': [10.5, 10.5, 20.3, 20.3],
-            ...     'ms_level': [1, 1, 1, 1]
-            ... })
-            >>> exp = MSExperiment.from_dataframe(df)
-        """
+    def from_dataframe(
+        cls,
+        df: pd.DataFrame,
+        mz: str = 'mz',
+        intensity: str = 'intensity',
+        rt: str = 'retention_time',
+        ms_level: str = 'ms_level',
+        native_id: str = 'native_id',
+        spec_idx: str = 'spectrum_id',
+    ) -> 'Py_MSExperiment':
+        """Create an experiment from a peak-level :class:`pandas.DataFrame`."""
+
+        required = {spec_idx, mz, intensity}
+        missing = required - set(df.columns)
+        if missing:
+            missing_str = ", ".join(sorted(missing))
+            raise ValueError(f"DataFrame is missing required columns: {missing_str}")
+
         exp = oms.MSExperiment()
-        
-        for _, spec_idx in df.groupby(spec_idx):
+
+        grouped = df.groupby(spec_idx, sort=False)
+        for _, spectrum_df in grouped:
             spec = oms.MSSpectrum()
-            spec.set_peaks((spec_idx[mz].values.tolist(), 
-                          spec_idx[intensity].values.tolist()))
+            spec.set_peaks((
+                spectrum_df[mz].astype(float).tolist(),
+                spectrum_df[intensity].astype(float).tolist(),
+            ))
 
-            # Set metadata if available
-            if rt in spec_idx.columns:
-                spec.setRT(spec_idx[rt].iloc[0])
+            if rt in spectrum_df.columns:
+                spec.setRT(float(spectrum_df[rt].iloc[0]))
 
-            if ms_level in spec_idx.columns:
-                spec.setMSLevel(int(spec_idx[ms_level].iloc[0]))
-            if native_id in spec_idx.columns:
-                spec.setNativeID(str(spec_idx[native_id].iloc[0]))
+            if ms_level in spectrum_df.columns:
+                spec.setMSLevel(int(spectrum_df[ms_level].iloc[0]))
+
+            if native_id in spectrum_df.columns:
+                spec.setNativeID(str(spectrum_df[native_id].iloc[0]))
 
             exp.addSpectrum(spec)
-        
+
         return cls(exp)
+
+    @classmethod
+    def from_df(cls, df: pd.DataFrame, **kwargs) -> 'Py_MSExperiment':
+        """Alias for :meth:`from_dataframe` matching :meth:`get_df`."""
+
+        return cls.from_dataframe(df, **kwargs)
     
     def to_mzml(self, filepath: str):
         """
@@ -371,6 +365,11 @@ class Py_MSExperiment:
             return self._peaks_dataframe(ms_level)
         else:
             return self._spectra_dataframe(ms_level)
+
+    def get_df(self, include_peaks: bool = True, ms_level: Optional[int] = None) -> pd.DataFrame:
+        """Alias for :meth:`to_dataframe` for backwards compatibility."""
+
+        return self.to_dataframe(include_peaks=include_peaks, ms_level=ms_level)
     
     def _spectra_dataframe(self, ms_level: Optional[int] = None) -> pd.DataFrame:
         """Create spectrum-level DataFrame."""
