@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 oms = pytest.importorskip("pyopenms")
@@ -106,3 +107,35 @@ def test_py_consensusmap_remove_and_delete():
 
     with pytest.raises(TypeError):
         del cmap[object()]
+
+
+def test_py_consensusmap_dataframe_roundtrip_preserves_meta():
+    cmap = Py_ConsensusMap()
+    for idx in range(2):
+        feature = oms.ConsensusFeature()
+        feature.setUniqueId(idx)
+        feature.setRT(100.0 + idx)
+        feature.setMZ(500.0 + idx)
+        feature.setIntensity(1000.0 + (idx * 10))
+        feature.setCharge(2)
+        feature.setWidth(0.5)
+        feature.setQuality(0.9)
+        feature.setMetaValue("note", f"c{idx}")
+        cmap.append(feature)
+
+    df = cmap.to_dataframe()
+    assert set(["rt", "mz", "intensity", "note"]).issubset(df.columns)
+
+    df["mz"] += 0.1
+    rebuilt = Py_ConsensusMap.from_dataframe(df)
+
+    assert len(rebuilt) == len(cmap)
+    assert rebuilt[0].getMetaValue("note") == "c0"
+    assert rebuilt[1].getMZ() == pytest.approx(cmap[1].getMZ() + 0.1)
+
+
+def test_py_consensusmap_from_dataframe_requires_columns():
+    df = pd.DataFrame({"rt": [1.0], "mz": [2.0]})
+
+    with pytest.raises(ValueError):
+        Py_ConsensusMap.from_dataframe(df)

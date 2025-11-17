@@ -357,11 +357,52 @@ cons_map.append(cons_feature)
 del cons_map[-3:]
 ```
 
+```python
+# DataFrame round-trip
+df = feature_map.to_dataframe()
+df["mz"] += 0.01  # manipulate with pandas
+feature_map = Py_FeatureMap.from_dataframe(df)
+
+cons_df = cons_map.get_df()
+cons_df["quality"] = 0.95
+cons_map = Py_ConsensusMap.from_df(cons_df)
+
+peaks_df = exp.get_df()
+peaks_df["intensity"] *= 1.1
+exp = Py_MSExperiment.from_df(peaks_df)
+```
+
 Behind the scenes the wrappers copy the retained entries back into the
 underlying pyOpenMS container, preserving meta data while exposing the
 expected Python semantics. By contrast, pyOpenMS requires manually creating a
 new container, copying every element except the ones you wish to remove, and
 reassigning the result.
+
+### Dictionary-Style Meta Data Access
+
+Any pyOpenMS type that derives from `MetaInfoInterface` (features, spectra,
+consensus features, etc.) now behaves like a standard Python mapping for its
+meta annotations:
+
+```python
+import pyopenms as oms
+from openms_python import Py_Feature, Py_MSSpectrum
+
+feature = Py_Feature()
+feature["label"] = "Sample1"
+feature.update(condition="control", replicate="R1")
+assert feature["label"] == "Sample1"
+assert feature.get("missing", "n/a") == "n/a"
+
+spectrum = Py_MSSpectrum(oms.MSSpectrum())
+spectrum["IonInjectTime"] = 12.3
+assert "IonInjectTime" in spectrum
+spectrum.pop("IonInjectTime")
+```
+
+Internally this syntax delegates to the familiar `setMetaValue`,
+`getMetaValue`, and `removeMetaValue` calls on the wrapped pyOpenMS object, so
+no information is lost compared to the C++ interface.
 
 ## Advanced Examples
 

@@ -122,6 +122,8 @@ def test_py_msexperiment_dataframe_conversion_and_filters():
     )
     assert spectra_df.shape[0] == 3
 
+    assert spectra_df.equals(exp.get_df(include_peaks=False))
+
     peaks_df = exp.to_dataframe(include_peaks=True, ms_level=1)
     assert peaks_df["ms_level"].unique().tolist() == [1]
     assert peaks_df.shape[0] == 6  # two spectra * three peaks
@@ -157,6 +159,12 @@ def test_py_msexperiment_construction_from_dataframe():
     assert len(exp) == 2
     assert exp[0].retention_time == pytest.approx(5.0)
     assert exp[1].ms_level == 2
+
+    alias = Py_MSExperiment.from_df(df)
+    assert len(alias) == len(exp)
+
+    with pytest.raises(ValueError):
+        Py_MSExperiment.from_dataframe(pd.DataFrame({"spectrum_id": [0], "mz": [100.0]}))
 
 
 def test_mzml_roundtrip(tmp_path):
