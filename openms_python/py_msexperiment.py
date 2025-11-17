@@ -59,27 +59,6 @@ class _Py_MSExperimentRTSlicing:
         """Handle function call syntax: exp.rt_filter(rt_min, rt_max)"""
         return self.experiment.filter_by_rt_range(rt_min, rt_max)
     
-class _Py_MSExperimentRTSlicing:
-    """Helper class for retention time slicing operations on MSExperiment."""
-    
-    def __init__(self, experiment: 'Py_MSExperiment'):
-        self.experiment = experiment
-    
-    def __getitem__(self, key) -> 'Py_MSExperiment':
-        """Handle slice syntax for retention time ranges."""
-        if isinstance(key, slice):
-            if key.start is not None and key.stop is not None:
-                # Retention time slice: experiment.rt[2010.0:2010.5]
-                return self.experiment.filter_by_rt_range(key.start, key.stop)
-            else:
-                raise ValueError("Both start and stop values required for retention time slice")
-        else:
-            raise TypeError(f"Invalid slice type: {type(key)}")
-    
-    def __call__(self, rt_min: float, rt_max: float) -> 'Py_MSExperiment':
-        """Handle function call syntax: exp.rt(rt_min, rt_max)"""
-        return self.experiment.filter_by_rt_range(rt_min, rt_max)
-
 
 class Py_MSExperiment:
     """
