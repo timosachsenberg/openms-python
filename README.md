@@ -13,9 +13,10 @@
 
 [pyOpenMS](https://pyopenms.readthedocs.io/) is a Python binding for the powerful OpenMS C++ library. However, being a direct C++ binding, it doesn't always feel "Pythonic". This package wraps pyOpenMS to provide:
 
-✅ **Pythonic properties** instead of verbose getters/setters  
-✅ **Intuitive iteration** with smart filtering  
-✅ **pandas DataFrame integration** for data analysis  
+✅ **Pythonic properties** instead of verbose getters/setters
+✅ **Intuitive iteration** with smart filtering
+✅ **Identification helpers** for protein/peptide results with idXML IO
+✅ **pandas DataFrame integration** for data analysis
 ✅ **Method chaining** for processing pipelines  
 ✅ **Type hints** for better IDE support  
 ✅ **Clean, documented API** with examples  
@@ -68,6 +69,34 @@ print(f"MS levels: {exp.ms_levels}")
 
 # Print summary
 exp.print_summary()
+```
+
+# Identification workflows
+
+Protein- and peptide-identification results often originate from search
+engines that export **idXML** files. The `Identifications` helper reads these
+files into convenient containers for downstream processing.
+
+```python
+from openms_python import Identifications
+
+# Load both protein and peptide identifications from idXML
+ids = Identifications.from_idxml("search_results.idXML")
+
+print(ids.summary())
+# {'proteins': 12, 'peptides': 42, 'protein_hits': 12, 'peptide_hits': 42}
+
+# Filter peptides by their top-hit score while keeping the protein context
+high_conf = ids.filter_peptides_by_score(0.05)
+
+# Look up peptides that match a particular protein accession
+matches = high_conf.peptides_for_protein("P01234")
+for pep in matches:
+    hit = pep.getHits()[0]
+    print(hit.getSequence(), hit.getScore())
+
+# Persist the curated results back to disk
+high_conf.to_idxml("curated_results.idXML")
 ```
 
 ### Working with Spectra
@@ -421,6 +450,30 @@ plt.show()
 - `filter_by_intensity(min_intensity)`: Filter peaks by intensity
 - `top_n_peaks(n)`: Keep top N peaks
 - `normalize_intensity(max_value)`: Normalize intensities
+
+- `normalize_intensity(max_value)`: Normalize intensities
+
+### Identifications, ProteinIdentifications & PeptideIdentifications
+
+**Identifications** combines protein and peptide search results and keeps the
+two collections synchronized.
+
+**Constructors / IO:**
+- `Identifications.from_idxml(path)`: Load protein & peptide IDs from an idXML file
+- `Identifications.store(path)` / `to_idxml(path)`: Save to idXML
+
+**Convenience helpers:**
+- `Identifications.summary()`: Quick counts of IDs and hits
+- `Identifications.find_protein(...)`, `find_peptide(...)`: Search by identifier
+- `Identifications.find_protein_by_accession(...)`: Look up proteins by accession
+- `Identifications.find_peptide_by_sequence(...)`: Case-insensitive peptide search
+- `Identifications.filter_peptides_by_score(threshold)`: Return a copy with filtered peptides
+- `Identifications.peptides_for_protein(accession)`: Retrieve peptides linked to a protein
+
+Underlying containers (`ProteinIdentifications`, `PeptideIdentifications`) behave
+like Python sequences: they support slicing, appending, iterating, and provide
+convenience methods such as `find_by_identifier`, `find_by_accession`, and
+`filter_by_score` for quickly triaging search hits.
 
 ## Development
 
