@@ -2,11 +2,13 @@
 Pythonic wrapper for pyOpenMS MSExperiment class.
 """
 
+from pathlib import Path
 from typing import Iterator, Optional, List, Union, Sequence, Dict, Any
 import pandas as pd
 import numpy as np
 import pyopenms as oms
 from .py_msspectrum import Py_MSSpectrum
+from ._io_utils import ensure_allowed_suffix, MS_EXPERIMENT_EXTENSIONS
 
 
 PEAK_PICKER_REGISTRY: Dict[str, Any] = {
@@ -184,14 +186,28 @@ class Py_MSExperiment:
     def to_mzml(self, filepath: str):
         """
         Save MSExperiment to an mzML file.
-        
+
         Args:
             filepath: Output path for mzML file
-            
+
         Example:
             >>> exp.to_file('output.mzML')
         """
         oms.MzMLFile().store(filepath, self._experiment)
+
+    def load(self, filepath: Union[str, Path]) -> 'Py_MSExperiment':
+        """Load data from an MS file using its extension for detection."""
+
+        ensure_allowed_suffix(filepath, MS_EXPERIMENT_EXTENSIONS, "MSExperiment")
+        oms.FileHandler().loadExperiment(str(filepath), self._experiment)
+        return self
+
+    def store(self, filepath: Union[str, Path]) -> 'Py_MSExperiment':
+        """Store the experiment to disk based on the output extension."""
+
+        ensure_allowed_suffix(filepath, MS_EXPERIMENT_EXTENSIONS, "MSExperiment")
+        oms.FileHandler().storeExperiment(str(filepath), self._experiment)
+        return self
     
     # ==================== Pythonic Properties ====================
     

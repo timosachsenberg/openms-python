@@ -1,9 +1,11 @@
 """Pythonic wrapper for pyOpenMS FeatureMap objects."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterator, Optional, Union
 
 import pyopenms as oms
+from ._io_utils import ensure_allowed_suffix, FEATURE_MAP_EXTENSIONS
 
 
 class Py_FeatureMap:
@@ -49,3 +51,17 @@ class Py_FeatureMap:
         """Append a :class:`pyopenms.Feature` to the map."""
 
         self._feature_map.push_back(feature)
+
+    def load(self, filepath: Union[str, Path]) -> 'Py_FeatureMap':
+        """Load a feature map from disk by inspecting the extension."""
+
+        ensure_allowed_suffix(filepath, FEATURE_MAP_EXTENSIONS, "FeatureMap")
+        oms.FeatureXMLFile().load(str(filepath), self._feature_map)
+        return self
+
+    def store(self, filepath: Union[str, Path]) -> 'Py_FeatureMap':
+        """Store the feature map to disk, validating the output extension."""
+
+        ensure_allowed_suffix(filepath, FEATURE_MAP_EXTENSIONS, "FeatureMap")
+        oms.FeatureXMLFile().store(str(filepath), self._feature_map)
+        return self

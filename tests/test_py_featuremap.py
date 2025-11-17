@@ -38,3 +38,26 @@ def test_py_featuremap_len_and_indexing():
 
     with pytest.raises(TypeError):
         _ = fmap[None]
+
+
+def test_py_featuremap_load_store_roundtrip(tmp_path):
+    fmap = build_feature_map()
+    out_path = tmp_path / "features.featureXML"
+
+    fmap.store(out_path)
+    assert out_path.exists()
+
+    loaded = Py_FeatureMap().load(out_path)
+    assert len(loaded) == len(fmap)
+    assert [feat.getUniqueId() for feat in loaded] == [feat.getUniqueId() for feat in fmap]
+
+
+def test_py_featuremap_rejects_unknown_extension(tmp_path):
+    fmap = build_feature_map()
+    bad_path = tmp_path / "features.txt"
+
+    with pytest.raises(ValueError):
+        fmap.store(bad_path)
+
+    with pytest.raises(ValueError):
+        Py_FeatureMap().load(bad_path)

@@ -127,6 +127,29 @@ def test_mzml_roundtrip(tmp_path):
     assert loaded[0].retention_time == pytest.approx(exp[0].retention_time)
 
 
+def test_py_msexperiment_load_store_by_extension(tmp_path):
+    exp = build_experiment()
+    output = tmp_path / "extension-test.mzML"
+
+    exp.store(output)
+    assert output.exists()
+
+    loaded = Py_MSExperiment().load(output)
+    assert len(loaded) == len(exp)
+    assert [spec.native_id for spec in loaded] == [spec.native_id for spec in exp]
+
+
+def test_py_msexperiment_rejects_unknown_extension(tmp_path):
+    exp = build_experiment()
+    bad_path = tmp_path / "experiment.txt"
+
+    with pytest.raises(ValueError):
+        exp.store(bad_path)
+
+    with pytest.raises(ValueError):
+        Py_MSExperiment().load(bad_path)
+
+
 def test_peak_picking_convenience(monkeypatch):
     exp = build_experiment()
     original_ms1 = exp[0].mz.tolist()
