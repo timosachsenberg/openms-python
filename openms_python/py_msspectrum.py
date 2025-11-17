@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 import pyopenms as oms
 
+from ._meta_mapping import MetaInfoMappingMixin
 
-class Py_MSSpectrum:
+
+class Py_MSSpectrum(MetaInfoMappingMixin):
     """
     A Pythonic wrapper around pyOpenMS MSSpectrum.
     
@@ -33,6 +35,11 @@ class Py_MSSpectrum:
             native_spectrum: pyOpenMS MSSpectrum object
         """
         self._spectrum = native_spectrum
+
+    # ==================== Meta-info support ====================
+
+    def _meta_object(self) -> oms.MetaInfoInterface:
+        return self._spectrum
     
     # ==================== Pythonic Properties ====================
     

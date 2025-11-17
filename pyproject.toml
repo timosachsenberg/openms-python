@@ -49,6 +49,9 @@ Repository = "https://github.com/openms/openms-python"
 where = ["."]
 include = ["openms_python*"]
 
+[tool.setuptools.package-data]
+"openms_python" = ["examples/*.mzML"]
+
 [tool.black]
 line-length = 100
 target-version = ['py38', 'py39', 'py310', 'py311']
