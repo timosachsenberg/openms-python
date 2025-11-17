@@ -6,6 +6,7 @@ from typing import Iterable, Iterator, Optional, Union
 
 import pyopenms as oms
 from ._io_utils import ensure_allowed_suffix, FEATURE_MAP_EXTENSIONS
+from .py_feature import Py_Feature
 
 
 class Py_FeatureMap:
@@ -23,11 +24,11 @@ class Py_FeatureMap:
     def __len__(self) -> int:  # pragma: no cover - trivial
         return int(self._feature_map.size())
 
-    def __iter__(self) -> Iterator[oms.Feature]:
+    def __iter__(self) -> Iterator[Py_Feature]:
         for index in range(len(self)):
             yield self[index]
 
-    def __getitem__(self, key: Union[int, slice]) -> Union[oms.Feature, 'Py_FeatureMap']:
+    def __getitem__(self, key: Union[int, slice]) -> Union[Py_Feature, 'Py_FeatureMap']:
         """Return individual features or a sliced :class:`Py_FeatureMap`."""
 
         if isinstance(key, slice):
@@ -39,17 +40,17 @@ class Py_FeatureMap:
 
         if isinstance(key, int):
             index = self._normalize_index(key)
-            return self._feature_map[index]
+            return Py_Feature(self._feature_map[index])
 
         raise TypeError(f"Invalid index type: {type(key)}")
 
-    def append(self, feature: oms.Feature) -> 'Py_FeatureMap':
+    def append(self, feature: Union[oms.Feature, Py_Feature]) -> 'Py_FeatureMap':
         """Append a :class:`pyopenms.Feature` to the map."""
 
-        self._feature_map.push_back(feature)
+        self._feature_map.push_back(self._as_native_feature(feature))
         return self
 
-    def extend(self, features: Iterable[oms.Feature]) -> 'Py_FeatureMap':
+    def extend(self, features: Iterable[Union[oms.Feature, Py_Feature]]) -> 'Py_FeatureMap':
         """Append multiple features to the map."""
 
         for feature in features:
@@ -122,3 +123,14 @@ class Py_FeatureMap:
             new_map.push_back(oms.Feature(source_map[idx]))
 
         self._feature_map = new_map
+
+    @staticmethod
+    def _as_native_feature(feature: Union[oms.Feature, Py_Feature]) -> oms.Feature:
+        if isinstance(feature, Py_Feature):
+            return feature.native
+        if isinstance(feature, oms.Feature):
+            return feature
+        raise TypeError(
+            "Features must be pyopenms.Feature or Py_Feature instances, "
+            f"got {type(feature).__name__}"
+        )
