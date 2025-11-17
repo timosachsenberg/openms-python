@@ -115,6 +115,32 @@ for pep in matches:
 high_conf.to_idxml("curated_results.idXML")
 ```
 
+### Iterate over containers and metadata
+
+All sequence-like wrappers (feature maps, consensus maps, identification containers,
+and experiments) support Python's iteration protocol. Metadata-aware wrappers such
+as :class:`Py_Feature` and :class:`Py_MSSpectrum` expose their meta values like a
+regular mapping, so you can loop over keys or call ``len()``.
+
+```python
+from openms_python import Py_Feature, Py_FeatureMap, Identifications
+
+# Assume ``feature_df`` is a pandas DataFrame with feature columns
+feature_df = ...
+fmap = Py_FeatureMap.from_dataframe(feature_df)
+for feature in fmap:
+    print("Feature UID", feature.getUniqueId())
+
+ids = Identifications.from_idxml("results.idXML")
+for peptide in ids:  # equivalent to iterating over ids.peptide_identifications
+    print(peptide.getIdentifier())
+
+feature = Py_Feature()
+feature["label"] = "sample_a"
+for key in feature:
+    print(key, feature[key])
+```
+
 ### Working with Spectra
 
 ```python

@@ -43,6 +43,15 @@ def test_py_featuremap_len_and_indexing():
         _ = fmap[None]
 
 
+def test_py_featuremap_iteration_returns_py_features():
+    fmap = build_feature_map(3)
+
+    collected = list(fmap)
+
+    assert all(isinstance(feature, Py_Feature) for feature in collected)
+    assert [feature.getUniqueId() for feature in collected] == [0, 1, 2]
+
+
 def test_py_featuremap_load_store_roundtrip(tmp_path):
     fmap = build_feature_map()
     out_path = tmp_path / "features.featureXML"

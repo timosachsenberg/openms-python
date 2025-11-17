@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import pyopenms as oms
 
@@ -94,6 +94,23 @@ class MetaInfoMappingMixin:
                 self[key] = value
         for key, value in kwargs.items():
             self[key] = value
+
+    # ---------------------------- Container API ----------------------------
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over all stored meta value keys."""
+
+        keys: list[Any] = []
+        self._meta().getKeys(keys)
+        for key in keys:
+            yield self._coerce_key(key)
+
+    def __len__(self) -> int:
+        """Return the number of stored meta values."""
+
+        keys: list[Any] = []
+        self._meta().getKeys(keys)
+        return len(keys)
 
     def keys(self):  # pragma: no cover - simple proxy
         return list(self._meta().getMetaValues().keys())

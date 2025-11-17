@@ -45,3 +45,12 @@ def test_py_msspectrum_meta_access():
     value = spectrum.pop("Instrument", None)
     assert value == "QExactive"
     assert spectrum.get("Instrument") is None
+
+
+def test_meta_mapping_supports_iteration_and_len():
+    feature = Py_Feature()
+    feature["sample"] = "A"
+    feature["condition"] = "control"
+
+    assert set(feature) == {"sample", "condition"}
+    assert len(feature) == 2
