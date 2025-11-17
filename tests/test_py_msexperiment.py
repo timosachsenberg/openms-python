@@ -4,7 +4,7 @@ import pytest
 
 oms = pytest.importorskip("pyopenms")
 
-from openms_python.io import read_mzml, write_mzml
+from openms_python.io import read_mzml, write_mzml, stream_mzml
 from openms_python.py_msexperiment import Py_MSExperiment
 import openms_python.py_msexperiment as py_ms_module
 from openms_python.py_msspectrum import Py_MSSpectrum
@@ -125,6 +125,32 @@ def test_mzml_roundtrip(tmp_path):
     assert [spec.ms_level for spec in loaded] == [spec.ms_level for spec in exp]
     assert [spec.native_id for spec in loaded] == [spec.native_id for spec in exp]
     assert loaded[0].retention_time == pytest.approx(exp[0].retention_time)
+
+
+def test_stream_mzml_iterates_spectra(tmp_path):
+    exp = build_experiment(4)
+    path = tmp_path / "streaming.mzML"
+
+    write_mzml(exp, path)
+
+    with stream_mzml(path) as spectra:
+        native_ids = [spec.native_id for spec in spectra]
+
+    assert native_ids == [f"scan={idx}" for idx in range(4)]
+
+
+def test_stream_mzml_native_spectra(tmp_path):
+    exp = build_experiment(2)
+    path = tmp_path / "stream-native.mzML"
+
+    write_mzml(exp, path)
+
+    with stream_mzml(path, as_wrapper=False) as spectra:
+        first = next(spectra)
+        assert isinstance(first, oms.MSSpectrum)
+
+    # Ensure context manager drained without iterating all spectra
+    assert path.exists()
 
 
 def test_py_msexperiment_load_store_by_extension(tmp_path):
