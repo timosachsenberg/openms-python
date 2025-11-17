@@ -71,6 +71,22 @@ print(f"MS levels: {exp.ms_levels}")
 exp.print_summary()
 ```
 
+### Built-in example data
+
+New to OpenMS or don't have data handy? `openms_python` ships with a tiny
+``small.mzML`` example that is perfect for quick experiments.
+
+```python
+from openms_python import Py_MSExperiment, get_example
+
+example_path = get_example("small.mzML")
+exp = Py_MSExperiment.from_file(example_path)
+print(f"Loaded {len(exp)} spectra from the example file")
+
+# Or load the raw bytes directly
+example_bytes = get_example("small.mzML", load=True)
+```
+
 # Identification workflows
 
 Protein- and peptide-identification results often originate from search
