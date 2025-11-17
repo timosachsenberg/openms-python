@@ -10,6 +10,7 @@ PathLike = Union[str, Path]
 MS_EXPERIMENT_EXTENSIONS: FrozenSet[str] = frozenset({".mzml", ".mzxml", ".mzdata"})
 FEATURE_MAP_EXTENSIONS: FrozenSet[str] = frozenset({".featurexml"})
 CONSENSUS_MAP_EXTENSIONS: FrozenSet[str] = frozenset({".consensusxml"})
+IDENTIFICATION_EXTENSIONS: FrozenSet[str] = frozenset({".idxml"})
 
 
 def _normalized_suffix(path: PathLike) -> str:
