@@ -317,6 +317,61 @@ with stream_mzml("big.mzML") as spectra:
 print(f"Processed {ms2} MS2 spectra")
 ```
 
+## High-level Workflows
+
+### Feature Detection as a Method
+
+```python
+from openms_python import Py_MSExperiment
+
+exp = Py_MSExperiment.from_file("data.mzML")
+features = exp.detect_features(min_intensity=1_000.0)
+print(f"Detected {len(features)} coarse features")
+```
+
+### Streaming FASTA Digestion and Theoretical Spectra
+
+```python
+from openms_python import FastaWorkflow
+
+workflow = FastaWorkflow.from_file("proteins.fasta")
+for entry in workflow.theoretical_spectra(charges=(2, 3)):
+    spectrum = entry["spectrum"]
+    print(entry["protein_id"], entry["peptide_sequence"], spectrum.getMSLevel())
+```
+
+### High-level FDR Filtering
+
+```python
+from openms_python import Identifications
+
+ids = Identifications.from_idxml("search_results.idXML")
+high_conf = ids.filter_by_fdr(max_q_value=0.01)
+print(f"{len(high_conf.peptide_identifications)} peptides at 1% FDR")
+```
+
+### ID Mapping, Alignment and Linking
+
+```python
+from openms_python import Identifications, Py_MSExperiment, Py_FeatureMap
+
+exp = Py_MSExperiment.from_file("data.mzML")
+ids = Identifications.from_idxml("search_results.idXML")
+high_conf = ids.filter_by_fdr()
+
+features = exp.detect_features()
+annotated = features.annotate_with_identifications(high_conf)
+aligned = Py_FeatureMap.align([annotated])
+consensus = Py_FeatureMap.link(aligned)
+```
+
+### Quantitation Table Export
+
+```python
+quant_table = consensus.to_quant_table()
+print(quant_table.head())
+```
+
 ### Pythonic Mutation Helpers
 
 All wrappers behave like mutable Python sequences.

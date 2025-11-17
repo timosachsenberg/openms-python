@@ -4,9 +4,12 @@ Pythonic wrapper for pyOpenMS MSExperiment class.
 
 from pathlib import Path
 from typing import Iterator, Optional, List, Union, Sequence, Dict, Any, Iterable, Callable, Set
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import pyopenms as oms
+
+from .py_featuremap import Py_FeatureMap
 from .py_msspectrum import Py_MSSpectrum
 from ._io_utils import ensure_allowed_suffix, MS_EXPERIMENT_EXTENSIONS
 
@@ -208,6 +211,56 @@ class Py_MSExperiment:
         ensure_allowed_suffix(filepath, MS_EXPERIMENT_EXTENSIONS, "MSExperiment")
         oms.FileHandler().storeExperiment(str(filepath), self._experiment)
         return self
+
+    # ==================== High-level Workflows ====================
+
+    def detect_features(
+        self,
+        *,
+        min_intensity: float = 0.0,
+        mz_tolerance: float = 0.01,
+    ) -> Py_FeatureMap:
+        """Coarsely cluster MS1 peaks into :class:`Py_FeatureMap` entries."""
+
+        clusters: List[Dict[str, Any]] = []
+
+        for spectrum_index, spectrum in enumerate(self._experiment):
+            if spectrum.getMSLevel() != 1:
+                continue
+            mzs, intensities = spectrum.get_peaks()
+            for mz, intensity in zip(mzs, intensities):
+                if intensity < min_intensity:
+                    continue
+
+                assigned = None
+                for cluster in clusters:
+                    if abs(cluster["mz"] - mz) <= mz_tolerance:
+                        assigned = cluster
+                        break
+
+                if assigned is None:
+                    assigned = {"mz": mz, "rt": spectrum.getRT(), "entries": []}
+                    clusters.append(assigned)
+
+                assigned["entries"].append((spectrum_index, spectrum.getRT(), intensity, mz))
+                mzs_in_cluster = [entry[3] for entry in assigned["entries"]]
+                rts_in_cluster = [entry[1] for entry in assigned["entries"]]
+                assigned["mz"] = float(np.mean(mzs_in_cluster))
+                assigned["rt"] = float(np.mean(rts_in_cluster))
+
+        feature_map = oms.FeatureMap()
+        for cluster in clusters:
+            feature = oms.Feature()
+            feature.setRT(float(cluster["rt"]))
+            feature.setMZ(float(cluster["mz"]))
+            intensities = [entry[2] for entry in cluster["entries"]]
+            feature.setIntensity(float(np.sum(intensities)))
+            feature.setMetaValue("n_peaks", len(intensities))
+            first_index = cluster["entries"][0][0]
+            feature.setMetaValue("spectrum_index", int(first_index))
+            feature_map.push_back(feature)
+
+        return Py_FeatureMap(feature_map)
     
     # ==================== Pythonic Properties ====================
     
