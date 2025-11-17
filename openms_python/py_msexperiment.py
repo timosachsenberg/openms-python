@@ -3,7 +3,7 @@ Pythonic wrapper for pyOpenMS MSExperiment class.
 """
 
 from pathlib import Path
-from typing import Iterator, Optional, List, Union, Sequence, Dict, Any, Iterable
+from typing import Iterator, Optional, List, Union, Sequence, Dict, Any, Iterable, Callable, Set
 import pandas as pd
 import numpy as np
 import pyopenms as oms
@@ -668,6 +668,69 @@ class Py_MSExperiment:
 
         return Py_MSExperiment(working_exp)
 
+    def smooth_gaussian(
+        self,
+        ms_levels: Optional[Union[int, Sequence[int]]] = None,
+        inplace: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> 'Py_MSExperiment':
+        """Apply a Gaussian smoothing filter to spectra.
+
+        Args:
+            ms_levels: Optional single MS level or iterable of MS levels to smooth.
+                When ``None`` (default) all spectra are smoothed.
+            inplace: When ``True`` the current experiment is modified and returned.
+            params: Optional dictionary of GaussFilter parameters.
+            **kwargs: Additional GaussFilter parameters passed as keyword arguments.
+
+        Returns:
+            A Py_MSExperiment with smoothed spectra (``self`` when ``inplace=True``).
+
+        Example:
+            >>> smoothed = exp.smooth_gaussian(gaussian_width=0.1)
+            >>> exp.smooth_gaussian(ms_levels=1, inplace=True)
+        """
+
+        smoother = oms.GaussFilter()
+        configured = self._configure_filter(smoother, params, kwargs)
+        return self._apply_spectrum_transform(
+            configured.filter,
+            ms_levels=ms_levels,
+            inplace=inplace,
+        )
+
+    def smooth_savitzky_golay(
+        self,
+        ms_levels: Optional[Union[int, Sequence[int]]] = None,
+        inplace: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> 'Py_MSExperiment':
+        """Apply a Savitzky-Golay smoothing filter to spectra.
+
+        Args:
+            ms_levels: Optional single MS level or iterable of MS levels to smooth.
+            inplace: When ``True`` the current experiment is modified and returned.
+            params: Optional dictionary of filter parameters.
+            **kwargs: Additional filter parameters (e.g. ``frame_length``).
+
+        Returns:
+            A Py_MSExperiment with smoothed spectra (``self`` when ``inplace=True``).
+
+        Example:
+            >>> exp.smooth_savitzky_golay(frame_length=7)
+            >>> exp.smooth_savitzky_golay(ms_levels=[2], inplace=True)
+        """
+
+        smoother = oms.SavitzkyGolayFilter()
+        configured = self._configure_filter(smoother, params, kwargs)
+        return self._apply_spectrum_transform(
+            configured.filter,
+            ms_levels=ms_levels,
+            inplace=inplace,
+        )
+
 
     def __getitem__(self, key) -> Union['Py_MSExperiment', Py_MSSpectrum]:
         """Return spectra using Python's indexing semantics."""
@@ -824,3 +887,58 @@ class Py_MSExperiment:
             new_exp.addSpectrum(oms.MSSpectrum(source_exp.getSpectrum(idx)))
 
         self._experiment = new_exp
+
+    def _configure_filter(
+        self,
+        filter_obj: Any,
+        params: Optional[Dict[str, Any]],
+        extra_params: Dict[str, Any],
+    ) -> Any:
+        """Return the filter object after applying the provided parameters."""
+
+        combined: Dict[str, Any] = {}
+        if params:
+            combined.update(params)
+        if extra_params:
+            combined.update(extra_params)
+
+        if combined:
+            filter_params = filter_obj.getParameters()
+            for key, value in combined.items():
+                filter_params.setValue(str(key), value)
+            filter_obj.setParameters(filter_params)
+
+        return filter_obj
+
+    def _apply_spectrum_transform(
+        self,
+        transform: Callable[[oms.MSSpectrum], None],
+        ms_levels: Optional[Union[int, Sequence[int]]],
+        inplace: bool,
+    ) -> 'Py_MSExperiment':
+        target_levels = self._normalize_ms_levels(ms_levels)
+
+        source_exp = self._experiment
+        working_exp = oms.MSExperiment(source_exp)
+        working_exp.clear(True)
+
+        for idx in range(source_exp.getNrSpectra()):
+            spectrum = oms.MSSpectrum(source_exp.getSpectrum(idx))
+            if target_levels is None or spectrum.getMSLevel() in target_levels:
+                transform(spectrum)
+            working_exp.addSpectrum(spectrum)
+
+        if inplace:
+            self._experiment = working_exp
+            return self
+
+        return Py_MSExperiment(working_exp)
+
+    def _normalize_ms_levels(
+        self, ms_levels: Optional[Union[int, Sequence[int]]]
+    ) -> Optional[Set[int]]:
+        if ms_levels is None:
+            return None
+        if isinstance(ms_levels, int):
+            return {int(ms_levels)}
+        return {int(level) for level in ms_levels}

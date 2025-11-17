@@ -157,6 +157,16 @@ centroided = exp.pick_peaks(method="HiRes", params={"signal_to_noise": 3.0})
 exp.pick_peaks(inplace=True)
 ```
 
+### Smoothing Spectra
+
+```python
+# Apply a GaussFilter with a custom width
+smoothed = exp.smooth_gaussian(gaussian_width=0.1)
+
+# Smooth only MS2 spectra in-place using Savitzky-Golay
+exp.smooth_savitzky_golay(ms_levels=2, inplace=True, frame_length=7)
+```
+
 ### Smart Iteration
 
 ```python
