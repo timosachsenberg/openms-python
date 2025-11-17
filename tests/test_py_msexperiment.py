@@ -199,6 +199,43 @@ def test_stream_mzml_native_spectra(tmp_path):
     assert path.exists()
 
 
+def test_smooth_gaussian_matches_pyopenms():
+    exp = build_experiment(1)
+
+    manual = oms.MSExperiment(exp.native)
+    gaussian = oms.GaussFilter()
+    params = gaussian.getParameters()
+    params.setValue("gaussian_width", 0.05)
+    gaussian.setParameters(params)
+    gaussian.filterExperiment(manual)
+
+    smoothed = exp.smooth_gaussian(gaussian_width=0.05)
+
+    manual_intensity = manual.getSpectrum(0).get_peaks()[1]
+    np.testing.assert_allclose(smoothed[0].intensity, manual_intensity)
+
+
+def test_smooth_savitzky_golay_inplace_and_ms_level_filtering():
+    exp = build_experiment()
+    manual = oms.MSExperiment(exp.native)
+
+    sg_filter = oms.SavitzkyGolayFilter()
+    params = sg_filter.getParameters()
+    params.setValue("frame_length", 5)
+    sg_filter.setParameters(params)
+
+    for idx in range(manual.getNrSpectra()):
+        spectrum = manual.getSpectrum(idx)
+        if spectrum.getMSLevel() == 2:
+            sg_filter.filter(spectrum)
+
+    result = exp.smooth_savitzky_golay(ms_levels=2, inplace=True, frame_length=5)
+    assert result is exp
+
+    np.testing.assert_allclose(exp[0].intensity, manual.getSpectrum(0).get_peaks()[1])
+    np.testing.assert_allclose(exp[-1].intensity, manual.getSpectrum(manual.getNrSpectra() - 1).get_peaks()[1])
+
+
 def test_py_msexperiment_load_store_by_extension(tmp_path):
     exp = build_experiment()
     output = tmp_path / "extension-test.mzML"
