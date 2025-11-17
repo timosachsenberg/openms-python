@@ -4,6 +4,7 @@ import pytest
 
 oms = pytest.importorskip("pyopenms")
 
+from openms_python.io import read_mzml, write_mzml
 from openms_python.py_msexperiment import Py_MSExperiment
 from openms_python.py_msspectrum import Py_MSSpectrum
 
@@ -91,4 +92,18 @@ def test_py_msexperiment_construction_from_dataframe():
     assert len(exp) == 2
     assert exp[0].retention_time == pytest.approx(5.0)
     assert exp[1].ms_level == 2
+
+
+def test_mzml_roundtrip(tmp_path):
+    exp = build_experiment()
+    output = tmp_path / "roundtrip.mzML"
+
+    write_mzml(exp, output)
+    assert output.exists()
+
+    loaded = read_mzml(output)
+    assert len(loaded) == len(exp)
+    assert [spec.ms_level for spec in loaded] == [spec.ms_level for spec in exp]
+    assert [spec.native_id for spec in loaded] == [spec.native_id for spec in exp]
+    assert loaded[0].retention_time == pytest.approx(exp[0].retention_time)
 
