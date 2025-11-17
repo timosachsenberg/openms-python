@@ -13,9 +13,10 @@
 
 [pyOpenMS](https://pyopenms.readthedocs.io/) is a Python binding for the powerful OpenMS C++ library. However, being a direct C++ binding, it doesn't always feel "Pythonic". This package wraps pyOpenMS to provide:
 
-✅ **Pythonic properties** instead of verbose getters/setters  
-✅ **Intuitive iteration** with smart filtering  
-✅ **pandas DataFrame integration** for data analysis  
+✅ **Pythonic properties** instead of verbose getters/setters
+✅ **Intuitive iteration** with smart filtering
+✅ **Identification helpers** for protein/peptide results with idXML IO
+✅ **pandas DataFrame integration** for data analysis
 ✅ **Method chaining** for processing pipelines  
 ✅ **Type hints** for better IDE support  
 ✅ **Clean, documented API** with examples  
@@ -49,25 +50,8 @@ for spec in exp.ms1_spectra():
     print(f"RT: {spec.retention_time:.2f}s, mz: {spec.mz}, intens: {spec.intensity}")
 
 
-## or convert to pandas dataframe
+## or convert to pandas dataframe    
 df = spec.to_dataframe()  # Get peaks as DataFrame
-```
-
-### Stream very large mzML files
-
-When processing huge mzML files you often only need to work on one spectrum at
-a time. The helper `stream_mzml` wraps `pyopenms.stream_mzML` and yields
-`Py_MSSpectrum` objects so you get the same Pythonic conveniences without
-loading the entire file into memory:
-
-```python
-from openms_python import stream_mzml
-
-ms2_count = 0
-for spectrum in stream_mzml("large.mzML", ms_level=2):
-    ms2_count += 1
-
-print(f"Processed {ms2_count} MS2 spectra without loading the full file")
 ```
 
 ### Reading mzML Files
@@ -85,6 +69,50 @@ print(f"MS levels: {exp.ms_levels}")
 
 # Print summary
 exp.print_summary()
+```
+
+### Built-in example data
+
+New to OpenMS or don't have data handy? `openms_python` ships with a tiny
+``small.mzML`` example that is perfect for quick experiments.
+
+```python
+from openms_python import Py_MSExperiment, get_example
+
+example_path = get_example("small.mzML")
+exp = Py_MSExperiment.from_file(example_path)
+print(f"Loaded {len(exp)} spectra from the example file")
+
+# Or load the raw bytes directly
+example_bytes = get_example("small.mzML", load=True)
+```
+
+# Identification workflows
+
+Protein- and peptide-identification results often originate from search
+engines that export **idXML** files. The `Identifications` helper reads these
+files into convenient containers for downstream processing.
+
+```python
+from openms_python import Identifications
+
+# Load both protein and peptide identifications from idXML
+ids = Identifications.from_idxml("search_results.idXML")
+
+print(ids.summary())
+# {'proteins': 12, 'peptides': 42, 'protein_hits': 12, 'peptide_hits': 42}
+
+# Filter peptides by their top-hit score while keeping the protein context
+high_conf = ids.filter_peptides_by_score(0.05)
+
+# Look up peptides that match a particular protein accession
+matches = high_conf.peptides_for_protein("P01234")
+for pep in matches:
+    hit = pep.getHits()[0]
+    print(hit.getSequence(), hit.getScore())
+
+# Persist the curated results back to disk
+high_conf.to_idxml("curated_results.idXML")
 ```
 
 ### Working with Spectra
@@ -119,6 +147,40 @@ mz, intensity = spec.peaks
 # Or as a DataFrame
 peaks_df = spec.to_dataframe()
 print(peaks_df.head())
+```
+
+### Peak Picking in One Line
+
+#### Before (pyOpenMS)
+```python
+import pyopenms as oms
+
+picker = oms.PeakPickerHiRes()
+params = picker.getDefaults()
+params.setValue("signal_to_noise", 3.0)
+picker.setParameters(params)
+
+centroided = oms.MSExperiment(exp)
+picker.pickExperiment(exp, centroided, True)
+```
+
+#### After (openms-python)
+```python
+from openms_python import Py_MSExperiment
+
+centroided = exp.pick_peaks(method="HiRes", params={"signal_to_noise": 3.0})
+# or modify in-place
+exp.pick_peaks(inplace=True)
+```
+
+### Smoothing Spectra
+
+```python
+# Apply a GaussFilter with a custom width
+smoothed = exp.smooth_gaussian(gaussian_width=0.1)
+
+# Smooth only MS2 spectra in-place using Savitzky-Golay
+exp.smooth_savitzky_golay(ms_levels=2, inplace=True, frame_length=7)
 ```
 
 ### Smart Iteration
@@ -194,6 +256,38 @@ from openms_python import write_mzml
 write_mzml(exp, 'output.mzML')
 ```
 
+### Wrapper-Aware Load/Store
+
+All high-level containers expose `load`/`store` helpers that infer the correct
+pyOpenMS reader from the file extension (including `.gz`).
+
+#### Before (pyOpenMS)
+```python
+import pyopenms as oms
+
+exp = oms.MSExperiment()
+oms.MzMLFile().load("input.mzML", exp)
+oms.MzMLFile().store("output.mzML", exp)
+
+fmap = oms.FeatureMap()
+oms.FeatureXMLFile().load("input.featureXML", fmap)
+oms.FeatureXMLFile().store("output.featureXML", fmap)
+```
+
+#### After (openms-python)
+```python
+from openms_python import Py_MSExperiment, Py_FeatureMap, Py_ConsensusMap
+
+exp = Py_MSExperiment().load("input.mzML")
+exp.store("output.mzML")
+
+feature_map = Py_FeatureMap().load("input.featureXML")
+feature_map.store("output.featureXML")
+
+cons_map = Py_ConsensusMap().load("input.consensusXML")
+cons_map.store("output.consensusXML")
+```
+
 ### Context Managers
 
 ```python
@@ -209,6 +303,106 @@ with MzMLReader('data.mzML') as exp:
 with MzMLWriter('output.mzML') as writer:
     writer.write(exp)
 ```
+
+### Streaming Large mzML Files
+
+#### Before (pyOpenMS)
+```python
+import pyopenms as oms
+
+class SpectrumCounter(oms.MSExperimentConsumer):
+    def __init__(self):
+        super().__init__()
+        self.ms2 = 0
+
+    def consumeSpectrum(self, spec):
+        if spec.getMSLevel() == 2:
+            self.ms2 += 1
+
+consumer = SpectrumCounter()
+oms.MzMLFile().transform("big.mzML", consumer)
+print(f"Processed {consumer.ms2} MS2 spectra")
+```
+
+#### After (openms-python)
+```python
+from openms_python import stream_mzml
+
+with stream_mzml("big.mzML") as spectra:
+    ms2 = sum(1 for spec in spectra if spec.ms_level == 2)
+print(f"Processed {ms2} MS2 spectra")
+```
+
+### Pythonic Mutation Helpers
+
+All wrappers behave like mutable Python sequences.
+
+#### MSExperiment
+```python
+# Append and extend
+exp.append(new_spec).extend(other_exp)
+
+# Remove by index or slice
+exp.remove(-1)
+del exp[::2]
+```
+
+#### FeatureMap / ConsensusMap
+```python
+feature_map.append(feature)
+feature_map.extend(iter_of_features)
+feature_map.remove(0)     # delete by index
+
+cons_map.append(cons_feature)
+del cons_map[-3:]
+```
+
+```python
+# DataFrame round-trip
+df = feature_map.to_dataframe()
+df["mz"] += 0.01  # manipulate with pandas
+feature_map = Py_FeatureMap.from_dataframe(df)
+
+cons_df = cons_map.get_df()
+cons_df["quality"] = 0.95
+cons_map = Py_ConsensusMap.from_df(cons_df)
+
+peaks_df = exp.get_df()
+peaks_df["intensity"] *= 1.1
+exp = Py_MSExperiment.from_df(peaks_df)
+```
+
+Behind the scenes the wrappers copy the retained entries back into the
+underlying pyOpenMS container, preserving meta data while exposing the
+expected Python semantics. By contrast, pyOpenMS requires manually creating a
+new container, copying every element except the ones you wish to remove, and
+reassigning the result.
+
+### Dictionary-Style Meta Data Access
+
+Any pyOpenMS type that derives from `MetaInfoInterface` (features, spectra,
+consensus features, etc.) now behaves like a standard Python mapping for its
+meta annotations:
+
+```python
+import pyopenms as oms
+from openms_python import Py_Feature, Py_MSSpectrum
+
+feature = Py_Feature()
+feature["label"] = "Sample1"
+feature.update(condition="control", replicate="R1")
+assert feature["label"] == "Sample1"
+assert feature.get("missing", "n/a") == "n/a"
+
+spectrum = Py_MSSpectrum(oms.MSSpectrum())
+spectrum["IonInjectTime"] = 12.3
+assert "IonInjectTime" in spectrum
+spectrum.pop("IonInjectTime")
+```
+
+Internally this syntax delegates to the familiar `setMetaValue`,
+`getMetaValue`, and `removeMetaValue` calls on the wrapped pyOpenMS object, so
+no information is lost compared to the C++ interface.
 
 ## Advanced Examples
 
@@ -324,6 +518,30 @@ plt.show()
 - `top_n_peaks(n)`: Keep top N peaks
 - `normalize_intensity(max_value)`: Normalize intensities
 
+- `normalize_intensity(max_value)`: Normalize intensities
+
+### Identifications, ProteinIdentifications & PeptideIdentifications
+
+**Identifications** combines protein and peptide search results and keeps the
+two collections synchronized.
+
+**Constructors / IO:**
+- `Identifications.from_idxml(path)`: Load protein & peptide IDs from an idXML file
+- `Identifications.store(path)` / `to_idxml(path)`: Save to idXML
+
+**Convenience helpers:**
+- `Identifications.summary()`: Quick counts of IDs and hits
+- `Identifications.find_protein(...)`, `find_peptide(...)`: Search by identifier
+- `Identifications.find_protein_by_accession(...)`: Look up proteins by accession
+- `Identifications.find_peptide_by_sequence(...)`: Case-insensitive peptide search
+- `Identifications.filter_peptides_by_score(threshold)`: Return a copy with filtered peptides
+- `Identifications.peptides_for_protein(accession)`: Retrieve peptides linked to a protein
+
+Underlying containers (`ProteinIdentifications`, `PeptideIdentifications`) behave
+like Python sequences: they support slicing, appending, iterating, and provide
+convenience methods such as `find_by_identifier`, `find_by_accession`, and
+`filter_by_score` for quickly triaging search hits.
+
 ## Development
 
 ### Setup Development Environment
@@ -345,7 +563,6 @@ pip install -e ".[dev]"
 | Iterate MS1 | Manual loop + level check | `for spec in exp.ms1_spectra():` |
 | Peak data | `peaks = spec.get_peaks(); mz = peaks[0]` | `mz, intensity = spec.peaks` |
 | DataFrame | Not available | `df = exp.to_dataframe()` |
-| Stream large files | Custom consumer + `MzMLFile().transform(...)` | `for spec in stream_mzml(path): ...` |
 
 ## Contributing
 

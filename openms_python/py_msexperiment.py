@@ -2,11 +2,19 @@
 Pythonic wrapper for pyOpenMS MSExperiment class.
 """
 
-from typing import Iterator, Optional, List, Union
+from pathlib import Path
+from typing import Iterator, Optional, List, Union, Sequence, Dict, Any, Iterable, Callable, Set
 import pandas as pd
 import numpy as np
 import pyopenms as oms
 from .py_msspectrum import Py_MSSpectrum
+from ._io_utils import ensure_allowed_suffix, MS_EXPERIMENT_EXTENSIONS
+
+
+PEAK_PICKER_REGISTRY: Dict[str, Any] = {
+    "hires": oms.PeakPickerHiRes,
+    "cwt": getattr(oms, "PeakPickerCWT", oms.PeakPickerHiRes),
+}
 
 
 class _Py_MSExperimentSlicing:
@@ -122,70 +130,78 @@ class Py_MSExperiment:
         return cls(exp)
     
     @classmethod
-    def from_dataframe(cls, 
-                       df: pd.DataFrame, 
-                       mz: str = 'mz',
-                       intensity: str = 'intensity',
-                       rt: str = 'retention_time', 
-                       ms_level: str = 'ms_level',
-                       native_id: str = 'native_id',
-                       spec_idx: str = 'spectrum_id') -> 'Py_MSExperiment':
-        """
-        Create MSExperiment from a pandas DataFrame.
-        
-        Args:
-            df: DataFrame with columns including mz, intensity, and grouping column
-            mz: Column name for m/z values (default: 'mz')
-            intensity: Column name for intensity values (default: 'intensity')
-            rt: Column name for retention time (default: 'retention_time')
-            level: Column name for MS level (default: 'ms_level')
-            native_id: Column name for native ID (default: 'native_id')
-            spec_idx: Column name for spectrum index/grouping (default: 'spectrum_id')
-            
-        Returns:
-            MSExperiment object
-            
-        Example:
-            >>> df = pd.DataFrame({
-            ...     'spectrum_id': [0, 0, 1, 1],
-            ...     'mz': [100, 200, 150, 250],
-            ...     'intensity': [50, 100, 75, 125],
-            ...     'retention_time': [10.5, 10.5, 20.3, 20.3],
-            ...     'ms_level': [1, 1, 1, 1]
-            ... })
-            >>> exp = MSExperiment.from_dataframe(df)
-        """
+    def from_dataframe(
+        cls,
+        df: pd.DataFrame,
+        mz: str = 'mz',
+        intensity: str = 'intensity',
+        rt: str = 'retention_time',
+        ms_level: str = 'ms_level',
+        native_id: str = 'native_id',
+        spec_idx: str = 'spectrum_id',
+    ) -> 'Py_MSExperiment':
+        """Create an experiment from a peak-level :class:`pandas.DataFrame`."""
+
+        required = {spec_idx, mz, intensity}
+        missing = required - set(df.columns)
+        if missing:
+            missing_str = ", ".join(sorted(missing))
+            raise ValueError(f"DataFrame is missing required columns: {missing_str}")
+
         exp = oms.MSExperiment()
-        
-        for _, spec_idx in df.groupby(spec_idx):
+
+        grouped = df.groupby(spec_idx, sort=False)
+        for _, spectrum_df in grouped:
             spec = oms.MSSpectrum()
-            spec.set_peaks((spec_idx[mz].values.tolist(), 
-                          spec_idx[intensity].values.tolist()))
+            spec.set_peaks((
+                spectrum_df[mz].astype(float).tolist(),
+                spectrum_df[intensity].astype(float).tolist(),
+            ))
 
-            # Set metadata if available
-            if rt in spec_idx.columns:
-                spec.setRT(spec_idx[rt].iloc[0])
+            if rt in spectrum_df.columns:
+                spec.setRT(float(spectrum_df[rt].iloc[0]))
 
-            if ms_level in spec_idx.columns:
-                spec.setMSLevel(int(spec_idx[ms_level].iloc[0]))
-            if native_id in spec_idx.columns:
-                spec.setNativeID(str(spec_idx[native_id].iloc[0]))
+            if ms_level in spectrum_df.columns:
+                spec.setMSLevel(int(spectrum_df[ms_level].iloc[0]))
+
+            if native_id in spectrum_df.columns:
+                spec.setNativeID(str(spectrum_df[native_id].iloc[0]))
 
             exp.addSpectrum(spec)
-        
+
         return cls(exp)
+
+    @classmethod
+    def from_df(cls, df: pd.DataFrame, **kwargs) -> 'Py_MSExperiment':
+        """Alias for :meth:`from_dataframe` matching :meth:`get_df`."""
+
+        return cls.from_dataframe(df, **kwargs)
     
     def to_mzml(self, filepath: str):
         """
         Save MSExperiment to an mzML file.
-        
+
         Args:
             filepath: Output path for mzML file
-            
+
         Example:
             >>> exp.to_file('output.mzML')
         """
         oms.MzMLFile().store(filepath, self._experiment)
+
+    def load(self, filepath: Union[str, Path]) -> 'Py_MSExperiment':
+        """Load data from an MS file using its extension for detection."""
+
+        ensure_allowed_suffix(filepath, MS_EXPERIMENT_EXTENSIONS, "MSExperiment")
+        oms.FileHandler().loadExperiment(str(filepath), self._experiment)
+        return self
+
+    def store(self, filepath: Union[str, Path]) -> 'Py_MSExperiment':
+        """Store the experiment to disk based on the output extension."""
+
+        ensure_allowed_suffix(filepath, MS_EXPERIMENT_EXTENSIONS, "MSExperiment")
+        oms.FileHandler().storeExperiment(str(filepath), self._experiment)
+        return self
     
     # ==================== Pythonic Properties ====================
     
@@ -349,6 +365,11 @@ class Py_MSExperiment:
             return self._peaks_dataframe(ms_level)
         else:
             return self._spectra_dataframe(ms_level)
+
+    def get_df(self, include_peaks: bool = True, ms_level: Optional[int] = None) -> pd.DataFrame:
+        """Alias for :meth:`to_dataframe` for backwards compatibility."""
+
+        return self.to_dataframe(include_peaks=include_peaks, ms_level=ms_level)
     
     def _spectra_dataframe(self, ms_level: Optional[int] = None) -> pd.DataFrame:
         """Create spectrum-level DataFrame."""
@@ -580,33 +601,188 @@ class Py_MSExperiment:
             filtered_spec = spec.top_n_peaks(n)
             new_exp.addSpectrum(filtered_spec.native)
         return Py_MSExperiment(new_exp)
-    
-    
-    def __getitem__(self, key) -> Union['Py_MSExperiment', Py_MSSpectrum]:
+
+    def pick_peaks(
+        self,
+        method: str = "HiRes",
+        params: Optional[Dict[str, Any]] = None,
+        ms_levels: Optional[Union[int, Sequence[int]]] = 1,
+        inplace: bool = False,
+    ) -> 'Py_MSExperiment':
         """
-        Slicing by spectrum index.
-        
+        Convenience interface for pyOpenMS peak pickers.
+
         Args:
-            key: Integer index or slice object
-            
+            method: Name of the peak picking algorithm ("HiRes", "CWT", ...).
+            params: Optional dictionary of parameters passed to the picker.
+            ms_levels: Single MS level, list of MS levels, or None for all levels.
+            inplace: If True, modify the current experiment and return self.
+
         Returns:
-            Single Spectrum (if integer) or new Py_MSExperiment (if slice)
-            
+            A Py_MSExperiment with picked spectra (self when inplace=True).
+
         Example:
-            >>> # Get single spectrum
-            >>> spec = exp[10]
-            >>> 
-            >>> # Get spectra 5 to 15
-            >>> subset = exp[5:16]
+            >>> picked = exp.pick_peaks(method="HiRes", ms_levels=1)
         """
-        if isinstance(key, slice):
-            # Handle slice - return new Py_MSExperiment
-            start, stop, step = key.indices(len(self))
-            return self.filter_by_spectrum_index(start, stop, step)
-        elif isinstance(key, int):
-            return self.get_by_spectrum_index(key)
+
+        picker_cls = PEAK_PICKER_REGISTRY.get(method.lower())
+        if picker_cls is None:
+            raise ValueError(
+                f"Unknown peak picking method '{method}'. "
+                f"Available options: {sorted(PEAK_PICKER_REGISTRY.keys())}"
+            )
+
+        picker = picker_cls()
+
+        if params:
+            picker_params = picker.getParameters()
+            for key, value in params.items():
+                picker_params.setValue(key, value)
+            picker.setParameters(picker_params)
+
+        if ms_levels is None:
+            target_levels = None
+        elif isinstance(ms_levels, int):
+            target_levels = {int(ms_levels)}
         else:
-            raise TypeError(f"Invalid index type: {type(key)}")
+            target_levels = {int(level) for level in ms_levels}
+
+        working_exp = oms.MSExperiment(self._experiment)
+        working_exp.clear(True)
+
+        source_exp = self._experiment
+
+        for idx in range(source_exp.getNrSpectra()):
+            source_spec = source_exp.getSpectrum(idx)
+            target_spec = oms.MSSpectrum(source_spec)
+
+            if target_levels is None or source_spec.getMSLevel() in target_levels:
+                picker.pick(source_spec, target_spec)
+
+            working_exp.addSpectrum(target_spec)
+
+        if inplace:
+            self._experiment = working_exp
+            return self
+
+        return Py_MSExperiment(working_exp)
+
+    def smooth_gaussian(
+        self,
+        ms_levels: Optional[Union[int, Sequence[int]]] = None,
+        inplace: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> 'Py_MSExperiment':
+        """Apply a Gaussian smoothing filter to spectra.
+
+        Args:
+            ms_levels: Optional single MS level or iterable of MS levels to smooth.
+                When ``None`` (default) all spectra are smoothed.
+            inplace: When ``True`` the current experiment is modified and returned.
+            params: Optional dictionary of GaussFilter parameters.
+            **kwargs: Additional GaussFilter parameters passed as keyword arguments.
+
+        Returns:
+            A Py_MSExperiment with smoothed spectra (``self`` when ``inplace=True``).
+
+        Example:
+            >>> smoothed = exp.smooth_gaussian(gaussian_width=0.1)
+            >>> exp.smooth_gaussian(ms_levels=1, inplace=True)
+        """
+
+        smoother = oms.GaussFilter()
+        configured = self._configure_filter(smoother, params, kwargs)
+        return self._apply_spectrum_transform(
+            configured.filter,
+            ms_levels=ms_levels,
+            inplace=inplace,
+        )
+
+    def smooth_savitzky_golay(
+        self,
+        ms_levels: Optional[Union[int, Sequence[int]]] = None,
+        inplace: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> 'Py_MSExperiment':
+        """Apply a Savitzky-Golay smoothing filter to spectra.
+
+        Args:
+            ms_levels: Optional single MS level or iterable of MS levels to smooth.
+            inplace: When ``True`` the current experiment is modified and returned.
+            params: Optional dictionary of filter parameters.
+            **kwargs: Additional filter parameters (e.g. ``frame_length``).
+
+        Returns:
+            A Py_MSExperiment with smoothed spectra (``self`` when ``inplace=True``).
+
+        Example:
+            >>> exp.smooth_savitzky_golay(frame_length=7)
+            >>> exp.smooth_savitzky_golay(ms_levels=[2], inplace=True)
+        """
+
+        smoother = oms.SavitzkyGolayFilter()
+        configured = self._configure_filter(smoother, params, kwargs)
+        return self._apply_spectrum_transform(
+            configured.filter,
+            ms_levels=ms_levels,
+            inplace=inplace,
+        )
+
+
+    def __getitem__(self, key) -> Union['Py_MSExperiment', Py_MSSpectrum]:
+        """Return spectra using Python's indexing semantics."""
+
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            new_experiment = oms.MSExperiment()
+
+            for idx in range(start, stop, step):
+                new_experiment.addSpectrum(oms.MSSpectrum(self._experiment.getSpectrum(idx)))
+
+            return Py_MSExperiment(new_experiment)
+
+        if isinstance(key, int):
+            return self.get_by_spectrum_index(key)
+
+        raise TypeError(f"Invalid index type: {type(key)}")
+
+    def append(self, spectrum: Union[Py_MSSpectrum, oms.MSSpectrum]) -> 'Py_MSExperiment':
+        """Append a spectrum to the experiment."""
+
+        native = self._coerce_spectrum(spectrum)
+        self._experiment.addSpectrum(native)
+        return self
+
+    def extend(self, spectra: Iterable[Union[Py_MSSpectrum, oms.MSSpectrum]]) -> 'Py_MSExperiment':
+        """Append multiple spectra to the experiment."""
+
+        for spectrum in spectra:
+            self.append(spectrum)
+        return self
+
+    def remove(self, index: int) -> 'Py_MSExperiment':
+        """Remove the spectrum at *index* and return ``self`` for chaining."""
+
+        normalized = self._normalize_index(index)
+        self._delete_indices([normalized])
+        return self
+
+    def __delitem__(self, key) -> None:
+        """Delete spectra using integer indices or slices."""
+
+        if isinstance(key, int):
+            self.remove(key)
+            return
+
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            indices = list(range(start, stop, step))
+            self._delete_indices(indices)
+            return
+
+        raise TypeError(f"Invalid deletion index type: {type(key)}")
     
     # ==================== Analysis Methods ====================
     def summary(self) -> dict:
@@ -670,3 +846,98 @@ class Py_MSExperiment:
         not wrapped by this class.
         """
         return self._experiment
+
+    # ==================== Private Helpers ====================
+
+    def _coerce_spectrum(self, spectrum: Union[Py_MSSpectrum, oms.MSSpectrum]) -> oms.MSSpectrum:
+        if isinstance(spectrum, Py_MSSpectrum):
+            return oms.MSSpectrum(spectrum.native)
+        if isinstance(spectrum, oms.MSSpectrum):
+            return oms.MSSpectrum(spectrum)
+        raise TypeError(
+            "append expects pyopenms.MSSpectrum or Py_MSSpectrum instances"
+        )
+
+    def _normalize_index(self, index: int) -> int:
+        length = len(self)
+        if length == 0:
+            raise IndexError("MSExperiment is empty")
+        if index < 0:
+            index += length
+        if index < 0 or index >= length:
+            raise IndexError(f"Spectrum index {index} out of range [0, {length})")
+        return index
+
+    def _delete_indices(self, indices: Iterable[int]) -> None:
+        drop = sorted(set(indices))
+        if not drop:
+            return
+
+        source_exp = self._experiment
+        length = source_exp.getNrSpectra()
+        drop_set = set(drop)
+
+        new_exp = oms.MSExperiment(source_exp)
+        new_exp.clear(False)
+
+        for idx in range(length):
+            if idx in drop_set:
+                continue
+            new_exp.addSpectrum(oms.MSSpectrum(source_exp.getSpectrum(idx)))
+
+        self._experiment = new_exp
+
+    def _configure_filter(
+        self,
+        filter_obj: Any,
+        params: Optional[Dict[str, Any]],
+        extra_params: Dict[str, Any],
+    ) -> Any:
+        """Return the filter object after applying the provided parameters."""
+
+        combined: Dict[str, Any] = {}
+        if params:
+            combined.update(params)
+        if extra_params:
+            combined.update(extra_params)
+
+        if combined:
+            filter_params = filter_obj.getParameters()
+            for key, value in combined.items():
+                filter_params.setValue(str(key), value)
+            filter_obj.setParameters(filter_params)
+
+        return filter_obj
+
+    def _apply_spectrum_transform(
+        self,
+        transform: Callable[[oms.MSSpectrum], None],
+        ms_levels: Optional[Union[int, Sequence[int]]],
+        inplace: bool,
+    ) -> 'Py_MSExperiment':
+        target_levels = self._normalize_ms_levels(ms_levels)
+
+        source_exp = self._experiment
+        working_exp = oms.MSExperiment(source_exp)
+        working_exp.clear(True)
+
+        for idx in range(source_exp.getNrSpectra()):
+            spectrum = oms.MSSpectrum(source_exp.getSpectrum(idx))
+            if target_levels is None or spectrum.getMSLevel() in target_levels:
+                transform(spectrum)
+            working_exp.addSpectrum(spectrum)
+
+        if inplace:
+            self._experiment = working_exp
+            return self
+
+        return Py_MSExperiment(working_exp)
+
+    def _normalize_ms_levels(
+        self, ms_levels: Optional[Union[int, Sequence[int]]]
+    ) -> Optional[Set[int]]:
+        if ms_levels is None:
+            return None
+        if isinstance(ms_levels, int):
+            return {int(ms_levels)}
+        return {int(level) for level in ms_levels}
