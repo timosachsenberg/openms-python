@@ -106,3 +106,10 @@ def test_py_consensusmap_remove_and_delete():
 
     with pytest.raises(TypeError):
         del cmap[object()]
+
+
+def test_py_consensusmap_is_iterable():
+    cmap = build_consensus_map(4)
+
+    uids = [feature.getUniqueId() for feature in cmap]
+    assert uids == [0, 1, 2, 3]

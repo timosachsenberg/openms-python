@@ -54,6 +54,7 @@ def test_protein_identifications_behave_like_sequence() -> None:
     assert proteins[0].getHits()[0].getAccession() == "P1"
     assert isinstance(proteins[:1], ProteinIdentifications)
     assert proteins.find_by_identifier("run2").getHits()[0].getAccession() == "P2"
+    assert [p.getIdentifier() for p in proteins] == ["run1", "run2"]
 
 
 def test_peptide_identifications_filter_and_find() -> None:
@@ -69,6 +70,7 @@ def test_peptide_identifications_filter_and_find() -> None:
     filtered = pep_ids.filter_by_score(5.0)
     assert len(filtered) == 1
     assert filtered[0].getHits()[0].getSequence().toString() == "PEPTIDE"
+    assert [pep.getIdentifier() for pep in pep_ids] == ["run1", "run1"]
 
 
 def test_identifications_roundtrip_and_helpers(tmp_path: Path) -> None:
@@ -105,3 +107,18 @@ def test_identifications_roundtrip_and_helpers(tmp_path: Path) -> None:
 
     filtered_ids = loaded.filter_peptides_by_score(4.0)
     assert len(filtered_ids.peptide_identifications) == 1
+
+
+def test_identifications_is_iterable() -> None:
+    ids = Identifications(
+        ProteinIdentifications([_protein("run", "P10")]),
+        PeptideIdentifications([
+            _peptide("run", "PEPTIDE", 60.0, accessions=("P10",)),
+            _peptide("run", "OTHER", 5.0, higher_is_better=False, accessions=("P10",)),
+        ]),
+    )
+
+    assert [pep.getHits()[0].getSequence().toString() for pep in ids] == [
+        "PEPTIDE",
+        "OTHER",
+    ]

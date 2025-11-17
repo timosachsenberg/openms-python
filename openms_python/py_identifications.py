@@ -27,8 +27,9 @@ class ProteinIdentifications:
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self._proteins)
 
-    def __iter__(self) -> Iterator[oms.ProteinIdentification]:  # pragma: no cover - trivial
-        return iter(self._proteins)
+    def __iter__(self) -> Iterator[oms.ProteinIdentification]:
+        """Iterate over stored :class:`pyopenms.ProteinIdentification` entries."""
+        yield from self._proteins
 
     def __getitem__(self, key: Union[int, slice]) -> Union[oms.ProteinIdentification, "ProteinIdentifications"]:
         if isinstance(key, slice):
@@ -90,8 +91,9 @@ class PeptideIdentifications:
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self._peptides)
 
-    def __iter__(self) -> Iterator[oms.PeptideIdentification]:  # pragma: no cover - trivial
-        return iter(self._peptides)
+    def __iter__(self) -> Iterator[oms.PeptideIdentification]:
+        """Iterate over stored :class:`pyopenms.PeptideIdentification` entries."""
+        yield from self._peptides
 
     def __getitem__(self, key: Union[int, slice]) -> Union[oms.PeptideIdentification, "PeptideIdentifications"]:
         if isinstance(key, slice):
@@ -156,8 +158,9 @@ class Identifications:
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self.peptides)
 
-    def __iter__(self) -> Iterator[oms.PeptideIdentification]:  # pragma: no cover - trivial
-        return iter(self.peptides)
+    def __iter__(self) -> Iterator[oms.PeptideIdentification]:
+        """Iterate over peptide identifications (mirrors :attr:`peptides`)."""
+        yield from self.peptides
 
     @property
     def protein_identifications(self) -> ProteinIdentifications:

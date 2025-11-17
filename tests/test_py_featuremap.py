@@ -114,3 +114,10 @@ def test_py_featuremap_remove_and_delete():
 
     with pytest.raises(TypeError):
         del fmap[None]
+
+
+def test_py_featuremap_is_iterable():
+    fmap = build_feature_map(3)
+
+    uids = [feature.getUniqueId() for feature in fmap]
+    assert uids == [0, 1, 2]

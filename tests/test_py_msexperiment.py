@@ -113,6 +113,15 @@ def test_py_msexperiment_append_extend_and_delete():
         exp.append(object())
 
 
+def test_py_msexperiment_iterates_spectra():
+    exp = build_experiment(4)
+
+    spectra = list(exp)
+    assert len(spectra) == 4
+    assert all(isinstance(spec, Py_MSSpectrum) for spec in spectra)
+    assert [spec.native_id for spec in spectra] == [f"scan={idx}" for idx in range(4)]
+
+
 def test_py_msexperiment_dataframe_conversion_and_filters():
     exp = build_experiment()
 

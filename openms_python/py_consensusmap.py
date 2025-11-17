@@ -25,8 +25,9 @@ class Py_ConsensusMap:
         return int(self._consensus_map.size())
 
     def __iter__(self) -> Iterator[oms.ConsensusFeature]:
+        """Iterate over stored :class:`pyopenms.ConsensusFeature` instances."""
         for index in range(len(self)):
-            yield self[index]
+            yield self._consensus_map[index]
 
     def __getitem__(self, key: Union[int, slice]) -> Union[oms.ConsensusFeature, 'Py_ConsensusMap']:
         """Return consensus features or a sliced :class:`Py_ConsensusMap`."""

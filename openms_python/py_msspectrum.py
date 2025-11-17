@@ -2,7 +2,7 @@
 Pythonic wrapper for pyOpenMS Spectrum classes.
 """
 
-from typing import Tuple, Optional
+from typing import Iterator, Tuple, Optional
 import numpy as np
 import pandas as pd
 import pyopenms as oms
@@ -181,10 +181,10 @@ class Py_MSSpectrum:
         return self.__repr__()
 
 
-    def __iter__(self):
-        """Allow dict(self) and list(self) conversions."""
-        yield "mz", self.mz.tolist()
-        yield "intens", self.intensity.tolist()
+    def __iter__(self) -> Iterator[Tuple[float, float]]:
+        """Iterate over peaks as ``(mz, intensity)`` tuples."""
+        mz, intensity = self.peaks
+        yield from zip(mz.tolist(), intensity.tolist())
         
 
     

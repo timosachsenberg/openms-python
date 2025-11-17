@@ -84,3 +84,12 @@ def test_py_msspectrum_dataframe_helpers_round_trip():
     assert wrapper.ms_level == 1
     assert wrapper.native_id == "scan=1"
 
+
+def test_py_msspectrum_iterates_peaks():
+    wrapper = Py_MSSpectrum(create_native_spectrum())
+
+    peaks = list(wrapper)
+    assert len(peaks) == len(wrapper)
+    assert peaks[0] == pytest.approx((100.5, 200.0))
+    assert peaks[-1] == pytest.approx((320.5, 1000.0))
+

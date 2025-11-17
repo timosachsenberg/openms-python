@@ -24,8 +24,9 @@ class Py_FeatureMap:
         return int(self._feature_map.size())
 
     def __iter__(self) -> Iterator[oms.Feature]:
+        """Iterate over the stored :class:`pyopenms.Feature` objects."""
         for index in range(len(self)):
-            yield self[index]
+            yield self._feature_map[index]
 
     def __getitem__(self, key: Union[int, slice]) -> Union[oms.Feature, 'Py_FeatureMap']:
         """Return individual features or a sliced :class:`Py_FeatureMap`."""

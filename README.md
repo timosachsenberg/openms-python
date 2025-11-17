@@ -133,6 +133,35 @@ peaks_df = spec.to_dataframe()
 print(peaks_df.head())
 ```
 
+### Iterating over Maps and Identification Containers
+
+All higher level containers behave like regular Python sequences, so they can
+be unpacked with ``list()``/``for`` without any special helpers.
+
+```python
+from openms_python import (
+    Py_FeatureMap,
+    Py_ConsensusMap,
+    Py_MSExperiment,
+    Identifications,
+)
+
+fmap = Py_FeatureMap().load("features.featureXML")
+for feature in fmap:
+    process_feature(feature)
+
+cmap = Py_ConsensusMap().load("consensus.consensusXML")
+first_three = list(cmap)[:3]
+
+ids = Identifications.from_idxml("search_results.idXML")
+high_scores = [pep for pep in ids if pep.getHits()[0].getScore() > 50]
+
+exp = Py_MSExperiment.from_mzml("data.mzML")
+spec = exp[0]
+for mz, intensity in spec:  # Iterate over peaks as (mz, intensity)
+    handle_peak(mz, intensity)
+```
+
 ### Peak Picking in One Line
 
 #### Before (pyOpenMS)
