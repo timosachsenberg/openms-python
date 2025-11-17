@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import pyopenms as oms
 from .py_msspectrum import Py_MSSpectrum
+from .py_featuremap import Py_FeatureMap
 from ._io_utils import ensure_allowed_suffix, MS_EXPERIMENT_EXTENSIONS
 
 
@@ -15,6 +16,8 @@ PEAK_PICKER_REGISTRY: Dict[str, Any] = {
     "hires": oms.PeakPickerHiRes,
     "cwt": getattr(oms, "PeakPickerCWT", oms.PeakPickerHiRes),
 }
+
+_FeatureMapLike = Union[Py_FeatureMap, oms.FeatureMap]
 
 
 class _Py_MSExperimentSlicing:
@@ -667,6 +670,33 @@ class Py_MSExperiment:
 
         return Py_MSExperiment(working_exp)
 
+    def detect_features(
+        self,
+        *,
+        algorithm: str = "picked",
+        params: Optional[Union[oms.Param, Dict[str, Union[int, float, str]]]] = None,
+        seeds: Optional[_FeatureMapLike] = None,
+    ) -> Py_FeatureMap:
+        """Run a feature finder and return its :class:`Py_FeatureMap` result."""
+
+        algorithm = algorithm.lower()
+        if algorithm != "picked":
+            raise ValueError("Only the 'picked' feature finder is supported")
+
+        runner = oms.FeatureFinderAlgorithmPicked()
+        param_obj = runner.getDefaults()
+        if params is not None:
+            if isinstance(params, oms.Param):
+                param_obj = oms.Param(params)
+            else:
+                for key, value in params.items():
+                    param_obj.setValue(key, value)
+
+        feature_map = oms.FeatureMap()
+        seeds_map = self._coerce_feature_map(seeds)
+        runner.run(self._experiment, feature_map, param_obj, seeds_map)
+        return Py_FeatureMap(feature_map)
+
     def smooth_gaussian(
         self,
         ms_levels: Optional[Union[int, Sequence[int]]] = None,
@@ -856,6 +886,17 @@ class Py_MSExperiment:
             return oms.MSSpectrum(spectrum)
         raise TypeError(
             "append expects pyopenms.MSSpectrum or Py_MSSpectrum instances"
+        )
+
+    def _coerce_feature_map(self, feature_map: Optional[_FeatureMapLike]) -> oms.FeatureMap:
+        if feature_map is None:
+            return oms.FeatureMap()
+        if isinstance(feature_map, Py_FeatureMap):
+            return oms.FeatureMap(feature_map.native)
+        if isinstance(feature_map, oms.FeatureMap):
+            return oms.FeatureMap(feature_map)
+        raise TypeError(
+            "seeds must be an oms.FeatureMap or Py_FeatureMap instance"
         )
 
     def _normalize_index(self, index: int) -> int:

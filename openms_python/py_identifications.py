@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Union
+from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyopenms as oms
 
@@ -220,6 +220,32 @@ class Identifications:
         filtered = self.peptides.filter_by_score(threshold)
         return Identifications(self.proteins.copy(), filtered)
 
+    def filter_by_fdr(
+        self,
+        *,
+        threshold: float = 0.01,
+        level: str = "peptide",
+        qvalue_keys: Sequence[str] = ("q-value", "FDR", "pep:score"),
+    ) -> "Identifications":
+        """Return a copy filtered by False Discovery Rate at the given level."""
+
+        level = level.lower()
+        if level not in {"peptide", "protein"}:
+            raise ValueError("level must be either 'peptide' or 'protein'")
+
+        if level == "peptide":
+            entries = [oms.PeptideIdentification(entry) for entry in self.peptides.native]
+            _run_fdr(entries)
+            _ensure_q_values(entries, is_peptide=True)
+            kept = [entry for entry in entries if _extract_q_value(entry, qvalue_keys, True) <= threshold]
+            return Identifications(self.proteins.copy(), kept)
+
+        proteins = [oms.ProteinIdentification(entry) for entry in self.proteins.native]
+        _run_fdr(proteins)
+        _ensure_q_values(proteins, is_peptide=False)
+        kept_proteins = [entry for entry in proteins if _extract_q_value(entry, qvalue_keys, False) <= threshold]
+        return Identifications(kept_proteins, self.peptides.copy())
+
     def summary(self) -> dict:
         """Return basic counts about the contained identifications."""
 
@@ -231,3 +257,91 @@ class Identifications:
             "protein_hits": protein_hits,
             "peptide_hits": peptide_hits,
         }
+
+
+def _run_fdr(container: List[Union[oms.PeptideIdentification, oms.ProteinIdentification]]) -> None:
+    if not container:
+        return
+    fdr = oms.FalseDiscoveryRate()
+    try:
+        fdr.apply(container)
+    except RuntimeError:
+        # Fallback to manual estimation below
+        pass
+
+
+def _ensure_q_values(container: List, is_peptide: bool) -> None:
+    needs_assignment = not any(_has_q_value(entry, is_peptide) for entry in container)
+    if not needs_assignment:
+        return
+
+    entries: List[Tuple[Union[oms.PeptideIdentification, oms.ProteinIdentification], float, bool, bool]] = []
+    for entry in container:
+        hits = entry.getHits()
+        if not hits:
+            continue
+        label = _target_decoy_label(entry, hits[0], is_peptide)
+        if label is None:
+            continue
+        entries.append((entry, hits[0].getScore(), label == "decoy", entry.isHigherScoreBetter()))
+
+    if not entries:
+        return
+
+    higher_better = entries[0][3]
+    sorted_entries = sorted(entries, key=lambda item: item[1], reverse=higher_better)
+    ratios: List[float] = []
+    target = 0
+    decoy = 0
+    for entry, _, is_decoy, _ in sorted_entries:
+        if is_decoy:
+            decoy += 1
+        else:
+            target += 1
+        ratios.append(decoy / max(1, target))
+
+    best = 1.0
+    for idx in reversed(range(len(sorted_entries))):
+        best = min(best, ratios[idx])
+        entry = sorted_entries[idx][0]
+        _set_q_value(entry, best, is_peptide)
+
+
+def _has_q_value(entry, is_peptide: bool) -> bool:
+    if entry.metaValueExists("q-value"):
+        return True
+    hits = entry.getHits()
+    if not hits:
+        return False
+    return hits[0].metaValueExists("q-value")
+
+
+def _extract_q_value(entry, keys: Sequence[str], is_peptide: bool) -> float:
+    if entry.metaValueExists("q-value"):
+        return float(entry.getMetaValue("q-value"))
+    hits = entry.getHits()
+    if hits:
+        hit = hits[0]
+        if hit.metaValueExists("q-value"):
+            return float(hit.getMetaValue("q-value"))
+        for key in keys:
+            if hit.metaValueExists(key):
+                return float(hit.getMetaValue(key))
+    for key in keys:
+        if entry.metaValueExists(key):
+            return float(entry.getMetaValue(key))
+    return float(hits[0].getScore()) if hits else 1.0
+
+
+def _set_q_value(entry, value: float, is_peptide: bool) -> None:
+    entry.setMetaValue("q-value", float(value))
+    for hit in entry.getHits():
+        hit.setMetaValue("q-value", float(value))
+
+
+def _target_decoy_label(entry, hit, is_peptide: bool) -> Optional[str]:
+    if hit.metaValueExists("target_decoy"):
+        return str(hit.getMetaValue("target_decoy")).lower()
+    if entry.metaValueExists("target_decoy"):
+        return str(entry.getMetaValue("target_decoy")).lower()
+    return None

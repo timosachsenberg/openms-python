@@ -31,6 +31,18 @@ from .py_identifications import (
     PeptideIdentifications,
     Identifications,
 )
+from .workflows import (
+    DigestedPeptide,
+    TheoreticalSpectrumRecord,
+    ProteinStream,
+    PeptideStream,
+    SpectrumStream,
+    stream_theoretical_spectra_from_fasta,
+    map_identifications_to_features,
+    align_feature_maps,
+    link_features,
+    export_quant_table,
+)
 from .io import read_mzml, write_mzml, stream_mzml
 
 _EXAMPLE_PACKAGE = "openms_python.examples"
@@ -92,6 +104,16 @@ __all__ = [
     "ProteinIdentifications",
     "PeptideIdentifications",
     "Identifications",
+    "DigestedPeptide",
+    "TheoreticalSpectrumRecord",
+    "ProteinStream",
+    "PeptideStream",
+    "SpectrumStream",
+    "stream_theoretical_spectra_from_fasta",
+    "map_identifications_to_features",
+    "align_feature_maps",
+    "link_features",
+    "export_quant_table",
     "read_mzml",
     "write_mzml",
     "stream_mzml",

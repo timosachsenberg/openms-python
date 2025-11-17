@@ -149,6 +149,43 @@ peaks_df = spec.to_dataframe()
 print(peaks_df.head())
 ```
 
+## Workflow helpers
+
+`openms_python` now exposes opinionated utilities that combine the primitive
+wrappers into streaming pipelines and end-to-end quantitation helpers:
+
+```python
+from openms_python import (
+    Py_MSExperiment,
+    Identifications,
+    ProteinStream,
+    map_identifications_to_features,
+    align_feature_maps,
+    link_features,
+    export_quant_table,
+)
+
+# 1) Detect features in an experiment
+experiment = Py_MSExperiment.from_file("run.mzML")
+feature_map = experiment.detect_features()
+
+# 2) Map identifications and filter them by FDR
+identifications = Identifications.from_idxml("search_results.idXML")
+filtered = identifications.filter_by_fdr(threshold=0.01)
+annotated = map_identifications_to_features(feature_map, filtered)
+
+# 3) Align multiple maps and link them into a consensus representation
+aligned = align_feature_maps([annotated, second_run])
+consensus = link_features(aligned)
+
+# 4) Export a tidy quantitation table (per-sample intensities)
+quant_df = export_quant_table(consensus)
+
+# Bonus: streaming FASTA digestion & theoretical spectra generation
+for record in ProteinStream.from_fasta("proteins.fasta").digest().theoretical_spectra():
+    print(record.protein.identifier, record.peptide.toString(), len(record.spectrum))
+```
+
 ### Peak Picking in One Line
 
 #### Before (pyOpenMS)
