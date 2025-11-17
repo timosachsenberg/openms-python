@@ -49,6 +49,24 @@ def test_py_msexperiment_iteration_and_summary():
     assert summary["total_peaks"] == 9
 
 
+def test_py_msexperiment_pythonic_indexing():
+    exp = build_experiment(5)
+
+    assert exp[0].native_id == "scan=0"
+    assert exp[-1].native_id == "scan=4"
+
+    every_other = exp[::2]
+    assert isinstance(every_other, Py_MSExperiment)
+    assert len(every_other) == 3
+    assert [spec.native_id for spec in every_other] == ["scan=0", "scan=2", "scan=4"]
+
+    reversed_exp = exp[::-1]
+    assert [spec.native_id for spec in reversed_exp] == [f"scan={idx}" for idx in range(4, -1, -1)]
+
+    empty_slice = exp[10:20]
+    assert len(empty_slice) == 0
+
+
 def test_py_msexperiment_dataframe_conversion_and_filters():
     exp = build_experiment()
 

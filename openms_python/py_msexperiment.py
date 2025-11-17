@@ -654,30 +654,21 @@ class Py_MSExperiment:
 
 
     def __getitem__(self, key) -> Union['Py_MSExperiment', Py_MSSpectrum]:
-        """
-        Slicing by spectrum index.
-        
-        Args:
-            key: Integer index or slice object
-            
-        Returns:
-            Single Spectrum (if integer) or new Py_MSExperiment (if slice)
-            
-        Example:
-            >>> # Get single spectrum
-            >>> spec = exp[10]
-            >>> 
-            >>> # Get spectra 5 to 15
-            >>> subset = exp[5:16]
-        """
+        """Return spectra using Python's indexing semantics."""
+
         if isinstance(key, slice):
-            # Handle slice - return new Py_MSExperiment
             start, stop, step = key.indices(len(self))
-            return self.filter_by_spectrum_index(start, stop, step)
-        elif isinstance(key, int):
+            new_experiment = oms.MSExperiment()
+
+            for idx in range(start, stop, step):
+                new_experiment.addSpectrum(oms.MSSpectrum(self._experiment.getSpectrum(idx)))
+
+            return Py_MSExperiment(new_experiment)
+
+        if isinstance(key, int):
             return self.get_by_spectrum_index(key)
-        else:
-            raise TypeError(f"Invalid index type: {type(key)}")
+
+        raise TypeError(f"Invalid index type: {type(key)}")
     
     # ==================== Analysis Methods ====================
     def summary(self) -> dict:
