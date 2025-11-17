@@ -56,6 +56,20 @@ def test_protein_identifications_behave_like_sequence() -> None:
     assert proteins.find_by_identifier("run2").getHits()[0].getAccession() == "P2"
 
 
+def test_identification_containers_are_iterable() -> None:
+    proteins = ProteinIdentifications([_protein("runA", "PA"), _protein("runB", "PB")])
+    peptides = PeptideIdentifications([
+        _peptide("runA", "PEPTIDE", 12.0),
+        _peptide("runA", "PEPTIDER", 8.0),
+    ])
+
+    assert [prot.getIdentifier() for prot in proteins] == ["runA", "runB"]
+    assert [pep.getIdentifier() for pep in peptides] == ["runA", "runA"]
+
+    ids = Identifications(proteins, peptides)
+    assert list(ids) == list(peptides)
+
+
 def test_peptide_identifications_filter_and_find() -> None:
     pep_ids = PeptideIdentifications(
         [

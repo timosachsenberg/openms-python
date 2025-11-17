@@ -35,6 +35,16 @@ def test_py_consensusmap_len_and_indexing():
         _ = cmap[3]
 
 
+def test_py_consensusmap_is_iterable():
+    cmap = build_consensus_map(4)
+
+    collected = list(cmap)
+
+    assert len(collected) == 4
+    assert all(isinstance(feature, oms.ConsensusFeature) for feature in collected)
+    assert [feature.getUniqueId() for feature in collected] == [0, 1, 2, 3]
+
+
 def test_py_consensusmap_load_store_roundtrip(tmp_path):
     cmap = build_consensus_map()
     out_path = tmp_path / "consensus.consensusXML"
