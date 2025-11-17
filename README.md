@@ -302,6 +302,13 @@ cons_map.append(cons_feature)
 del cons_map[-3:]
 ```
 
+```python
+# DataFrame round-trip
+df = feature_map.to_dataframe()
+df["mz"] += 0.01  # manipulate with pandas
+feature_map = Py_FeatureMap.from_dataframe(df)
+```
+
 Behind the scenes the wrappers copy the retained entries back into the
 underlying pyOpenMS container, preserving meta data while exposing the
 expected Python semantics. By contrast, pyOpenMS requires manually creating a
