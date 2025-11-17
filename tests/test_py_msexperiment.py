@@ -67,6 +67,52 @@ def test_py_msexperiment_pythonic_indexing():
     assert len(empty_slice) == 0
 
 
+def test_py_msexperiment_append_extend_and_delete():
+    exp = Py_MSExperiment()
+
+    first = oms.MSSpectrum()
+    first.setNativeID("s0")
+    exp.append(first)
+
+    wrapped_native = oms.MSSpectrum()
+    wrapped_native.setNativeID("s1")
+    exp.append(Py_MSSpectrum(wrapped_native))
+
+    more = []
+    for native_id in ("s2", "s3"):
+        spec = oms.MSSpectrum()
+        spec.setNativeID(native_id)
+        more.append(spec)
+    exp.extend(more)
+
+    assert [spec.native_id for spec in exp] == ["s0", "s1", "s2", "s3"]
+
+    exp.remove(-1)
+    assert [spec.native_id for spec in exp] == ["s0", "s1", "s2"]
+
+    del exp[1]
+    assert [spec.native_id for spec in exp] == ["s0", "s2"]
+
+    batch = []
+    for suffix in range(4, 7):
+        spec = oms.MSSpectrum()
+        spec.setNativeID(f"s{suffix}")
+        batch.append(spec)
+    exp.extend(batch)
+
+    del exp[::2]
+    assert [spec.native_id for spec in exp] == ["s2", "s5"]
+
+    del exp[::-1]
+    assert len(exp) == 0
+
+    with pytest.raises(IndexError):
+        exp.remove(0)
+
+    with pytest.raises(TypeError):
+        exp.append(object())
+
+
 def test_py_msexperiment_dataframe_conversion_and_filters():
     exp = build_experiment()
 

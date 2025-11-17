@@ -74,3 +74,35 @@ def test_py_consensusmap_append_and_extend():
 
     cmap.extend(other_features)
     assert [feat.getUniqueId() for feat in cmap] == [42, 43, 44]
+
+
+def test_py_consensusmap_remove_and_delete():
+    cmap = build_consensus_map(5)
+
+    cmap.remove(0)
+    assert [feat.getUniqueId() for feat in cmap] == [1, 2, 3, 4]
+
+    del cmap[-2]
+    assert [feat.getUniqueId() for feat in cmap] == [1, 2, 4]
+
+    extras = []
+    for uid in (10, 11):
+        feat = oms.ConsensusFeature()
+        feat.setUniqueId(uid)
+        extras.append(feat)
+    cmap.extend(extras)
+
+    del cmap[::2]
+    assert [feat.getUniqueId() for feat in cmap] == [2, 10]
+
+    cmap.append(oms.ConsensusFeature())
+    cmap[-1].setUniqueId(12)
+
+    del cmap[::-1]
+    assert len(cmap) == 0
+
+    with pytest.raises(IndexError):
+        cmap.remove(0)
+
+    with pytest.raises(TypeError):
+        del cmap[object()]

@@ -38,11 +38,7 @@ class Py_FeatureMap:
             return Py_FeatureMap(sliced_map)
 
         if isinstance(key, int):
-            index = key
-            if index < 0:
-                index += len(self)
-            if index < 0 or index >= len(self):
-                raise IndexError(f"Feature index {key} out of range [0, {len(self)})")
+            index = self._normalize_index(key)
             return self._feature_map[index]
 
         raise TypeError(f"Invalid index type: {type(key)}")
@@ -60,6 +56,28 @@ class Py_FeatureMap:
             self.append(feature)
         return self
 
+    def remove(self, index: int) -> 'Py_FeatureMap':
+        """Remove the feature at *index* and return ``self`` for chaining."""
+
+        normalized = self._normalize_index(index)
+        self._delete_indices([normalized])
+        return self
+
+    def __delitem__(self, key: Union[int, slice]) -> None:
+        """Delete one or multiple features using Python's deletion semantics."""
+
+        if isinstance(key, int):
+            self.remove(key)
+            return
+
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            indices = list(range(start, stop, step))
+            self._delete_indices(indices)
+            return
+
+        raise TypeError(f"Invalid deletion index type: {type(key)}")
+
     def load(self, filepath: Union[str, Path]) -> 'Py_FeatureMap':
         """Load a feature map from disk by inspecting the extension."""
 
@@ -73,3 +91,34 @@ class Py_FeatureMap:
         ensure_allowed_suffix(filepath, FEATURE_MAP_EXTENSIONS, "FeatureMap")
         oms.FeatureXMLFile().store(str(filepath), self._feature_map)
         return self
+
+    # ==================== Private Helpers ====================
+
+    def _normalize_index(self, index: int) -> int:
+        length = len(self)
+        if length == 0:
+            raise IndexError("FeatureMap is empty")
+        if index < 0:
+            index += length
+        if index < 0 or index >= length:
+            raise IndexError(f"Feature index {index} out of range [0, {length})")
+        return index
+
+    def _delete_indices(self, indices: Iterable[int]) -> None:
+        drop = sorted(set(indices))
+        if not drop:
+            return
+
+        length = len(self)
+        source_map = self._feature_map
+        drop_set = set(drop)
+
+        new_map = oms.FeatureMap(source_map)
+        new_map.clear(False)
+
+        for idx in range(length):
+            if idx in drop_set:
+                continue
+            new_map.push_back(oms.Feature(source_map[idx]))
+
+        self._feature_map = new_map

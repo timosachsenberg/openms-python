@@ -39,11 +39,7 @@ class Py_ConsensusMap:
             return Py_ConsensusMap(sliced_map)
 
         if isinstance(key, int):
-            index = key
-            if index < 0:
-                index += len(self)
-            if index < 0 or index >= len(self):
-                raise IndexError(f"Consensus feature index {key} out of range [0, {len(self)})")
+            index = self._normalize_index(key)
             return self._consensus_map[index]
 
         raise TypeError(f"Invalid index type: {type(key)}")
@@ -68,9 +64,62 @@ class Py_ConsensusMap:
             self.append(feature)
         return self
 
+    def remove(self, index: int) -> 'Py_ConsensusMap':
+        """Remove the consensus feature at *index* and return ``self``."""
+
+        normalized = self._normalize_index(index)
+        self._delete_indices([normalized])
+        return self
+
+    def __delitem__(self, key: Union[int, slice]) -> None:
+        """Delete one or more consensus features using Python's semantics."""
+
+        if isinstance(key, int):
+            self.remove(key)
+            return
+
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            indices = list(range(start, stop, step))
+            self._delete_indices(indices)
+            return
+
+        raise TypeError(f"Invalid deletion index type: {type(key)}")
+
     def store(self, filepath: Union[str, Path]) -> 'Py_ConsensusMap':
         """Store the consensus map to disk, validating the output extension."""
 
         ensure_allowed_suffix(filepath, CONSENSUS_MAP_EXTENSIONS, "ConsensusMap")
         oms.ConsensusXMLFile().store(str(filepath), self._consensus_map)
         return self
+
+    # ==================== Private Helpers ====================
+
+    def _normalize_index(self, index: int) -> int:
+        length = len(self)
+        if length == 0:
+            raise IndexError("ConsensusMap is empty")
+        if index < 0:
+            index += length
+        if index < 0 or index >= length:
+            raise IndexError(f"Consensus feature index {index} out of range [0, {length})")
+        return index
+
+    def _delete_indices(self, indices: Iterable[int]) -> None:
+        drop = sorted(set(indices))
+        if not drop:
+            return
+
+        length = len(self)
+        source_map = self._consensus_map
+        drop_set = set(drop)
+
+        new_map = oms.ConsensusMap(source_map)
+        new_map.clear(False)
+
+        for idx in range(length):
+            if idx in drop_set:
+                continue
+            new_map.push_back(oms.ConsensusFeature(source_map[idx]))
+
+        self._consensus_map = new_map

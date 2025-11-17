@@ -79,3 +79,38 @@ def test_py_featuremap_append_and_extend():
 
     fmap.extend([second, third])
     assert [feat.getUniqueId() for feat in fmap] == [10, 11, 12]
+
+
+def test_py_featuremap_remove_and_delete():
+    fmap = build_feature_map(5)
+
+    fmap.remove(0)
+    assert [feat.getUniqueId() for feat in fmap] == [1, 2, 3, 4]
+
+    del fmap[-1]
+    assert [feat.getUniqueId() for feat in fmap] == [1, 2, 3]
+
+    new_feature = oms.Feature()
+    new_feature.setUniqueId(10)
+    other_feature = oms.Feature()
+    other_feature.setUniqueId(11)
+    fmap.extend([new_feature, other_feature])
+
+    del fmap[1:4:2]
+    assert [feat.getUniqueId() for feat in fmap] == [1, 3, 11]
+
+    extra = []
+    for uid in (12, 13):
+        feat = oms.Feature()
+        feat.setUniqueId(uid)
+        extra.append(feat)
+    fmap.extend(extra)
+
+    del fmap[::-2]
+    assert [feat.getUniqueId() for feat in fmap] == [3, 12]
+
+    with pytest.raises(IndexError):
+        fmap.remove(10)
+
+    with pytest.raises(TypeError):
+        del fmap[None]

@@ -3,7 +3,7 @@ Pythonic wrapper for pyOpenMS MSExperiment class.
 """
 
 from pathlib import Path
-from typing import Iterator, Optional, List, Union, Sequence, Dict, Any
+from typing import Iterator, Optional, List, Union, Sequence, Dict, Any, Iterable
 import pandas as pd
 import numpy as np
 import pyopenms as oms
@@ -685,6 +685,42 @@ class Py_MSExperiment:
             return self.get_by_spectrum_index(key)
 
         raise TypeError(f"Invalid index type: {type(key)}")
+
+    def append(self, spectrum: Union[Py_MSSpectrum, oms.MSSpectrum]) -> 'Py_MSExperiment':
+        """Append a spectrum to the experiment."""
+
+        native = self._coerce_spectrum(spectrum)
+        self._experiment.addSpectrum(native)
+        return self
+
+    def extend(self, spectra: Iterable[Union[Py_MSSpectrum, oms.MSSpectrum]]) -> 'Py_MSExperiment':
+        """Append multiple spectra to the experiment."""
+
+        for spectrum in spectra:
+            self.append(spectrum)
+        return self
+
+    def remove(self, index: int) -> 'Py_MSExperiment':
+        """Remove the spectrum at *index* and return ``self`` for chaining."""
+
+        normalized = self._normalize_index(index)
+        self._delete_indices([normalized])
+        return self
+
+    def __delitem__(self, key) -> None:
+        """Delete spectra using integer indices or slices."""
+
+        if isinstance(key, int):
+            self.remove(key)
+            return
+
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            indices = list(range(start, stop, step))
+            self._delete_indices(indices)
+            return
+
+        raise TypeError(f"Invalid deletion index type: {type(key)}")
     
     # ==================== Analysis Methods ====================
     def summary(self) -> dict:
@@ -748,3 +784,43 @@ class Py_MSExperiment:
         not wrapped by this class.
         """
         return self._experiment
+
+    # ==================== Private Helpers ====================
+
+    def _coerce_spectrum(self, spectrum: Union[Py_MSSpectrum, oms.MSSpectrum]) -> oms.MSSpectrum:
+        if isinstance(spectrum, Py_MSSpectrum):
+            return oms.MSSpectrum(spectrum.native)
+        if isinstance(spectrum, oms.MSSpectrum):
+            return oms.MSSpectrum(spectrum)
+        raise TypeError(
+            "append expects pyopenms.MSSpectrum or Py_MSSpectrum instances"
+        )
+
+    def _normalize_index(self, index: int) -> int:
+        length = len(self)
+        if length == 0:
+            raise IndexError("MSExperiment is empty")
+        if index < 0:
+            index += length
+        if index < 0 or index >= length:
+            raise IndexError(f"Spectrum index {index} out of range [0, {length})")
+        return index
+
+    def _delete_indices(self, indices: Iterable[int]) -> None:
+        drop = sorted(set(indices))
+        if not drop:
+            return
+
+        source_exp = self._experiment
+        length = source_exp.getNrSpectra()
+        drop_set = set(drop)
+
+        new_exp = oms.MSExperiment(source_exp)
+        new_exp.clear(False)
+
+        for idx in range(length):
+            if idx in drop_set:
+                continue
+            new_exp.addSpectrum(oms.MSSpectrum(source_exp.getSpectrum(idx)))
+
+        self._experiment = new_exp
