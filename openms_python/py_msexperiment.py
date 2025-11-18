@@ -605,6 +605,32 @@ class Py_MSExperiment:
             new_exp.addSpectrum(filtered_spec.native)
         return Py_MSExperiment(new_exp)
 
+    def normalize_to_tic(
+        self,
+        *,
+        ms_levels: Optional[Union[int, Sequence[int]]] = None,
+        inplace: bool = False,
+    ) -> 'Py_MSExperiment':
+        """Normalize spectra so their total ion current equals one."""
+
+        def transform(spectrum: oms.MSSpectrum) -> None:
+            mz_array, intensity_array = spectrum.get_peaks()
+            intensities = np.asarray(intensity_array, dtype=float)
+            if intensities.size == 0:
+                return
+            total = float(intensities.sum())
+            if total <= 0:
+                return
+            spectrum.set_peaks(
+                (list(mz_array), (intensities / total).tolist())
+            )
+
+        return self._apply_spectrum_transform(
+            transform,
+            ms_levels=ms_levels,
+            inplace=inplace,
+        )
+
     def pick_peaks(
         self,
         method: str = "HiRes",

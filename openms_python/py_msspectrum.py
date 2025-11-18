@@ -6,6 +6,7 @@ from typing import Tuple, Optional
 import numpy as np
 import pandas as pd
 import pyopenms as oms
+from pyopenms import Constants
 
 from ._meta_mapping import MetaInfoMappingMixin
 
@@ -92,7 +93,27 @@ class Py_MSSpectrum(MetaInfoMappingMixin):
         if precursors:
             return precursors[0].getCharge()
         return None
-    
+
+    @property
+    def precursor_mass(self) -> Optional[float]:
+        """Return the neutral precursor mass when available."""
+
+        if self.ms_level < 2:
+            return None
+        precursors = self._spectrum.getPrecursors()
+        if not precursors:
+            return None
+        precursor = precursors[0]
+        uncharged = float(precursor.getUnchargedMass())
+        if uncharged > 0:
+            return uncharged
+        charge = precursor.getCharge()
+        mz = precursor.getMZ()
+        if charge <= 0 or mz <= 0:
+            return None
+        proton = Constants.PROTON_MASS_U
+        return float((mz - proton) * charge)
+
     @property
     def native_id(self) -> str:
         """Get native ID of the spectrum."""
@@ -341,8 +362,20 @@ class Py_MSSpectrum(MetaInfoMappingMixin):
         new_spec.setRT(self.retention_time)
         new_spec.setMSLevel(self.ms_level)
         new_spec.setNativeID(self.native_id)
-        
+
         return Py_MSSpectrum(new_spec)
+
+    def normalize_to_tic(self) -> 'Py_MSSpectrum':
+        """Scale intensities so their sum equals one."""
+
+        mz, intensity = self.peaks
+        total = float(np.sum(intensity))
+        if total <= 0:
+            return self
+
+        normalized_spec = oms.MSSpectrum(self._spectrum)
+        normalized_spec.set_peaks((mz.tolist(), (intensity / total).tolist()))
+        return Py_MSSpectrum(normalized_spec)
 
     def normalize_intensity(self, max_value: float = 100.0) -> 'Py_MSSpectrum':
         """

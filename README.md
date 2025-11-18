@@ -145,6 +145,18 @@ print(f"Consensus contains {len(consensus)} features")
 The helper returns a fresh `Py_ConsensusMap` instance that can be exported,
 converted to a pandas DataFrame, or iterated for downstream analysis.
 
+## Identification performance showcase
+
+Looking for a larger end-to-end example? `tests/test_idperformance.py` ships with
+the repository as a miniature-yet-realistic identification workflow that ties
+many wrapper conveniences together. The test builds a tiny FASTA database,
+simulates MS2 spectra, runs a Hyperscore-style search (complete with target/decoy
+competition and q-value estimation), and even records how long the round-trip
+through mzML takes. It demonstrates how concise—and how performant—a simple
+search engine can be when built with the high-level helpers in
+`openms_python`. Reuse the test as inspiration for bespoke pipelines or as a
+regression harness when experimenting with search-related utilities.
+
 ### Iterate over containers and metadata
 
 All sequence-like wrappers (feature maps, consensus maps, identification containers,
