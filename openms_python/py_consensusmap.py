@@ -9,6 +9,7 @@ import pyopenms as oms
 
 from ._io_utils import ensure_allowed_suffix, CONSENSUS_MAP_EXTENSIONS
 from .py_featuremap import Py_FeatureMap
+from .py_identifications import Identifications
 
 
 class Py_ConsensusMap:
@@ -110,6 +111,48 @@ class Py_ConsensusMap:
 
         ensure_allowed_suffix(filepath, CONSENSUS_MAP_EXTENSIONS, "ConsensusMap")
         oms.ConsensusXMLFile().store(str(filepath), self._consensus_map)
+        return self
+
+    # ==================== Protein inference ====================
+
+    def infer_proteins(
+        self,
+        *,
+        algorithm: str = "basic",
+        params: Optional[Union[oms.Param, Dict[str, Union[int, float, str]]]] = None,
+        include_unassigned: bool = False,
+        greedy_group_resolution: bool = True,
+        experimental_design: Optional[oms.ExperimentalDesign] = None,
+    ) -> Identifications:
+        """Run protein inference on the identifications attached to this map."""
+
+        identifications = self._collect_identifications()
+        return identifications.infer_proteins(
+            algorithm=algorithm,
+            params=params,
+            consensus_map=self._consensus_map,
+            include_unassigned=include_unassigned,
+            greedy_group_resolution=greedy_group_resolution,
+            experimental_design=experimental_design,
+        )
+
+    def infer_protein_quantities(self, reference_map: int = 0) -> "Py_ConsensusMap":
+        """Infer protein-level quantities directly on this consensus map.
+
+        The method wraps :class:`pyopenms.ProteinInference`, which attaches
+        quantitative results to the map's stored
+        :class:`pyopenms.ProteinIdentification` entries based on their
+        associated peptide identifications.
+
+        Parameters
+        ----------
+        reference_map:
+            Index of the reference (e.g. iTRAQ) channel used as denominator
+            when calculating protein ratios.
+        """
+
+        runner = oms.ProteinInference()
+        runner.infer(self._consensus_map, int(reference_map))
         return self
 
     # ==================== Alignment helpers ====================
@@ -362,3 +405,10 @@ class Py_ConsensusMap:
             consensus_map.setColumnHeaders(headers)
 
         return consensus_map
+
+    def _collect_identifications(self) -> Identifications:
+        proteins = self._consensus_map.getProteinIdentifications()
+        peptides = list(self._consensus_map.getUnassignedPeptideIdentifications())
+        for feature in self._consensus_map:
+            peptides.extend(feature.getPeptideIdentifications())
+        return Identifications(proteins, peptides)

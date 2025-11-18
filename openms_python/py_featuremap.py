@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Union
+from typing import Dict, Iterable, Iterator, Optional, Union
 
 import pyopenms as oms
 import pandas as pd
 from ._io_utils import ensure_allowed_suffix, FEATURE_MAP_EXTENSIONS
 from .py_feature import Py_Feature
+from .py_identifications import Identifications
 
 
 class Py_FeatureMap:
@@ -110,6 +111,28 @@ class Py_FeatureMap:
         ensure_allowed_suffix(filepath, FEATURE_MAP_EXTENSIONS, "FeatureMap")
         oms.FeatureXMLFile().store(str(filepath), self._feature_map)
         return self
+
+    # ==================== Protein inference ====================
+
+    def infer_proteins(
+        self,
+        *,
+        algorithm: str = "basic",
+        params: Optional[Union[oms.Param, Dict[str, Union[int, float, str]]]] = None,
+        include_unassigned: bool = False,
+        greedy_group_resolution: bool = True,
+        experimental_design: Optional[oms.ExperimentalDesign] = None,
+    ) -> Identifications:
+        """Run protein inference on the identifications stored in this map."""
+
+        identifications = self._collect_identifications()
+        return identifications.infer_proteins(
+            algorithm=algorithm,
+            params=params,
+            include_unassigned=include_unassigned,
+            greedy_group_resolution=greedy_group_resolution,
+            experimental_design=experimental_design,
+        )
 
     # ==================== pandas integration ====================
 
@@ -251,7 +274,7 @@ class Py_FeatureMap:
             except Exception:
                 return value
         return value
-      
+
     def _as_native_feature(self, feature: Union[oms.Feature, Py_Feature]) -> oms.Feature:
         if isinstance(feature, Py_Feature):
             return feature.native
@@ -261,3 +284,9 @@ class Py_FeatureMap:
             "Features must be pyopenms.Feature or Py_Feature instances, "
             f"got {type(feature).__name__}"
         )
+
+    def _collect_identifications(self) -> Identifications:
+        proteins = self._feature_map.getProteinIdentifications()
+        peptides = list(self._feature_map.getUnassignedPeptideIdentifications())
+        peptides.extend(self._feature_map.get_assigned_peptide_identifications())
+        return Identifications(proteins, peptides)

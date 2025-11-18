@@ -5,6 +5,7 @@ oms = pytest.importorskip("pyopenms")
 
 from openms_python.py_feature import Py_Feature
 from openms_python.py_featuremap import Py_FeatureMap
+from openms_python.py_identifications import Identifications
 
 
 def build_feature_map(count: int = 4) -> Py_FeatureMap:
@@ -16,6 +17,28 @@ def build_feature_map(count: int = 4) -> Py_FeatureMap:
         feature.setMZ(400.0 + idx)
         feature_map.push_back(feature)
     return Py_FeatureMap(feature_map)
+
+
+def _protein(identifier: str, accession: str) -> oms.ProteinIdentification:
+    entry = oms.ProteinIdentification()
+    entry.setIdentifier(identifier)
+    hit = oms.ProteinHit()
+    hit.setAccession(accession)
+    entry.setHits([hit])
+    return entry
+
+
+def _peptide(identifier: str, sequence: str, score: float, accession: str) -> oms.PeptideIdentification:
+    entry = oms.PeptideIdentification()
+    entry.setIdentifier(identifier)
+    hit = oms.PeptideHit()
+    hit.setSequence(oms.AASequence.fromString(sequence))
+    hit.setScore(score)
+    evidence = oms.PeptideEvidence()
+    evidence.setProteinAccession(accession)
+    hit.setPeptideEvidences([evidence])
+    entry.setHits([hit])
+    return entry
 
 
 def test_py_featuremap_len_and_indexing():
@@ -163,3 +186,22 @@ def test_py_featuremap_from_dataframe_missing_columns():
 
     with pytest.raises(ValueError):
         Py_FeatureMap.from_dataframe(df)
+
+
+def test_py_featuremap_infer_proteins_collects_assigned_ids():
+    protein = _protein("run", "P10")
+    pep_a = _peptide("run", "PEPA", 5.0, "P10")
+    pep_b = _peptide("run", "PEPB", 25.0, "P10")
+
+    feature = oms.Feature()
+    feature.setPeptideIdentifications([pep_a, pep_b])
+
+    fmap = oms.FeatureMap()
+    fmap.setProteinIdentifications([protein])
+    fmap.push_back(feature)
+
+    wrapper = Py_FeatureMap(fmap)
+    inferred = wrapper.infer_proteins(algorithm="basic")
+
+    assert isinstance(inferred, Identifications)
+    assert inferred.protein_identifications[0].getHits()[0].getScore() == pytest.approx(25.0)

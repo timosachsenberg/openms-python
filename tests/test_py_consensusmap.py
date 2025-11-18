@@ -4,6 +4,7 @@ import pytest
 oms = pytest.importorskip("pyopenms")
 
 from openms_python.py_consensusmap import Py_ConsensusMap
+from openms_python.py_identifications import Identifications
 
 
 def build_consensus_map(count: int = 3) -> Py_ConsensusMap:
@@ -15,6 +16,28 @@ def build_consensus_map(count: int = 3) -> Py_ConsensusMap:
         feature.setMZ(400.0 + idx)
         cmap.push_back(feature)
     return Py_ConsensusMap(cmap)
+
+
+def _protein(identifier: str, accession: str) -> oms.ProteinIdentification:
+    entry = oms.ProteinIdentification()
+    entry.setIdentifier(identifier)
+    hit = oms.ProteinHit()
+    hit.setAccession(accession)
+    entry.setHits([hit])
+    return entry
+
+
+def _peptide(identifier: str, sequence: str, score: float, accession: str) -> oms.PeptideIdentification:
+    entry = oms.PeptideIdentification()
+    entry.setIdentifier(identifier)
+    hit = oms.PeptideHit()
+    hit.setSequence(oms.AASequence.fromString(sequence))
+    hit.setScore(score)
+    evidence = oms.PeptideEvidence()
+    evidence.setProteinAccession(accession)
+    hit.setPeptideEvidences([evidence])
+    entry.setHits([hit])
+    return entry
 
 
 def test_py_consensusmap_len_and_indexing():
@@ -149,3 +172,44 @@ def test_py_consensusmap_from_dataframe_requires_columns():
 
     with pytest.raises(ValueError):
         Py_ConsensusMap.from_dataframe(df)
+
+
+def test_py_consensusmap_infer_proteins_uses_consensus_map():
+    protein = _protein("run", "P10")
+    pep_a = _peptide("run", "PEPA", 5.0, "P10")
+    pep_b = _peptide("run", "PEPB", 30.0, "P10")
+
+    feature = oms.ConsensusFeature()
+    feature.setPeptideIdentifications([pep_a, pep_b])
+
+    cmap = oms.ConsensusMap()
+    cmap.setProteinIdentifications([protein])
+    cmap.push_back(feature)
+
+    wrapper = Py_ConsensusMap(cmap)
+    inferred = wrapper.infer_proteins(algorithm="basic", include_unassigned=True)
+
+    assert isinstance(inferred, Identifications)
+    assert inferred.protein_identifications[0].getHits()[0].getScore() == pytest.approx(30.0)
+
+
+def test_py_consensusmap_infer_protein_quantities(monkeypatch):
+    captured = {}
+
+    class DummyInference:
+        def __init__(self):
+            captured["instantiated"] = True
+
+        def infer(self, consensus_map, reference_map):
+            captured["consensus_map"] = consensus_map
+            captured["reference_map"] = reference_map
+
+    monkeypatch.setattr(oms, "ProteinInference", lambda: DummyInference())
+
+    wrapper = Py_ConsensusMap()
+    result = wrapper.infer_protein_quantities(reference_map=3)
+
+    assert result is wrapper
+    assert captured["instantiated"] is True
+    assert captured["consensus_map"] is wrapper.native
+    assert captured["reference_map"] == 3
