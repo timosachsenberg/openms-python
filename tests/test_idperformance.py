@@ -270,19 +270,21 @@ def _time_search(engine: SimpleSearchEngine, experiment: Py_MSExperiment) -> tup
 
 def test_simple_search_engine_identifies_targets(tmp_path):
     fasta_path = _build_fasta(tmp_path)
-    protein_stream = ProteinStream.from_fasta(fasta_path)
-    peptide_stream = protein_stream.digest(min_length=6, max_length=10)
-    digested = list(peptide_stream)
-    targets = [entry.peptide for entry in digested]
+    targets = [
+        entry.peptide
+        for entry in ProteinStream.from_fasta(fasta_path).digest(min_length=6, max_length=10)
+    ]
     assert len(targets) == 2
     decoys = [_reverse_sequence(peptide) for peptide in targets]
 
-    spectra_records = list(
-        protein_stream.digest(min_length=6, max_length=10)
-        .theoretical_spectra(generator_params=GENERATOR_PARAMS)
-    )
-    experiment = _build_experiment(spectra_records, decoys[0])
-    processed = experiment.filter_top_n_peaks(200).normalize_to_tic()
+    processed = _build_experiment(
+        list(
+            ProteinStream.from_fasta(fasta_path)
+            .digest(min_length=6, max_length=10)
+            .theoretical_spectra(generator_params=GENERATOR_PARAMS)
+        ),
+        decoys[0],
+    ).filter_top_n_peaks(200).normalize_to_tic()
 
     assert all(math.isclose(spec.total_ion_current, 1.0, rel_tol=1e-6) for spec in processed.ms2_spectra())
     assert all(spec.precursor_mass is not None for spec in processed.ms2_spectra())
@@ -291,8 +293,7 @@ def test_simple_search_engine_identifies_targets(tmp_path):
     psms = engine.search(processed)
     assert len(psms) == 3
 
-    scored = _compute_q_values(psms)
-    confident = scored[scored["q_value"] <= 0.01]
+    confident = _compute_q_values(psms).query("q_value <= 0.01")
     assert len(confident) == 2
     assert set(confident["Sequence"]) == {seq.toString() for seq in targets}
 
