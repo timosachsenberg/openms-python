@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Union
+from typing import Dict, Iterable, Iterator, Optional, Sequence, Union
 
 import pandas as pd
 import pyopenms as oms
 
 from ._io_utils import ensure_allowed_suffix, CONSENSUS_MAP_EXTENSIONS
+from .py_featuremap import Py_FeatureMap
 
 
 class Py_ConsensusMap:
@@ -110,6 +111,41 @@ class Py_ConsensusMap:
         ensure_allowed_suffix(filepath, CONSENSUS_MAP_EXTENSIONS, "ConsensusMap")
         oms.ConsensusXMLFile().store(str(filepath), self._consensus_map)
         return self
+
+    # ==================== Alignment helpers ====================
+
+    @classmethod
+    def align_and_link(
+        cls,
+        feature_maps: Sequence[Union['Py_FeatureMap', oms.FeatureMap]],
+        *,
+        alignment_method: str = "pose_clustering",
+        alignment_params: Optional[Dict[str, Union[int, float, str]]] = None,
+    ) -> 'Py_ConsensusMap':
+        """Align multiple feature maps and return their linked consensus map.
+
+        Parameters
+        ----------
+        feature_maps:
+            A sequence of :class:`Py_FeatureMap` objects or raw
+            :class:`pyopenms.FeatureMap` instances that should be aligned and
+            linked.
+        alignment_method:
+            Name of the OpenMS alignment algorithm to use. Supported values are
+            ``"pose_clustering"`` (feature based), ``"identification"``, and
+            ``"identity"`` (skip alignment).
+        alignment_params:
+            Optional dictionary of parameters applied to the selected
+            alignment algorithm.
+        """
+
+        if not feature_maps:
+            return cls()
+
+        native_maps = [cls._copy_feature_map(feature_map) for feature_map in feature_maps]
+        cls._align_feature_maps(native_maps, alignment_method, alignment_params)
+        consensus_map = cls._link_feature_maps(native_maps)
+        return cls(consensus_map)
 
     # ==================== pandas integration ====================
 
@@ -253,3 +289,76 @@ class Py_ConsensusMap:
             except Exception:
                 return value
         return value
+
+    # ==================== Alignment helpers (private) ====================
+
+    @staticmethod
+    def _copy_feature_map(feature_map: Union['Py_FeatureMap', oms.FeatureMap]) -> oms.FeatureMap:
+        if isinstance(feature_map, Py_FeatureMap):
+            return oms.FeatureMap(feature_map.native)
+        if isinstance(feature_map, oms.FeatureMap):
+            return oms.FeatureMap(feature_map)
+        raise TypeError(
+            "feature_maps must contain Py_FeatureMap or pyopenms.FeatureMap instances"
+        )
+
+    @classmethod
+    def _align_feature_maps(
+        cls,
+        feature_maps: Sequence[oms.FeatureMap],
+        alignment_method: str,
+        alignment_params: Optional[Dict[str, Union[int, float, str]]],
+    ) -> None:
+        method = alignment_method.strip().lower()
+        if method in {"identity", "none"}:
+            return
+
+        aligner = cls._create_alignment_algorithm(method)
+        params = aligner.getDefaults()
+        if alignment_params:
+            for key, value in alignment_params.items():
+                params.setValue(str(key), value)
+        aligner.setParameters(params)
+
+        reference_map = feature_maps[0]
+        aligner.setReference(reference_map)
+
+        transformer = oms.MapAlignmentTransformer()
+        for fmap in feature_maps:
+            transformation = oms.TransformationDescription()
+            try:
+                aligner.align(fmap, transformation)
+            except RuntimeError as exc:  # pragma: no cover - depends on OpenMS data
+                raise RuntimeError(
+                    "Alignment failed for one of the feature maps."
+                ) from exc
+            transformer.transformRetentionTimes(fmap, transformation, False)
+
+    @staticmethod
+    def _create_alignment_algorithm(method: str):
+        normalized = method.lower()
+        if normalized in {"pose_clustering", "pose", "feature"}:
+            return oms.MapAlignmentAlgorithmPoseClustering()
+        if normalized in {"identification", "id"}:
+            return oms.MapAlignmentAlgorithmIdentification()
+        raise ValueError(
+            "Unsupported alignment_method. Use 'pose_clustering', 'identification', or 'identity'."
+        )
+
+    @staticmethod
+    def _link_feature_maps(
+        feature_maps: Sequence[oms.FeatureMap],
+    ) -> oms.ConsensusMap:
+        grouping = oms.FeatureGroupingAlgorithmQT()
+        consensus_map = oms.ConsensusMap()
+        grouping.group(feature_maps, consensus_map)
+
+        if not consensus_map.getColumnHeaders():
+            headers: Dict[int, oms.ColumnHeader] = {}
+            for index, _ in enumerate(feature_maps):
+                header = oms.ColumnHeader()
+                header.label = f"map_{index}"
+                headers[index] = header
+            consensus_map.setColumnHeaders(headers)
+
+        return consensus_map
