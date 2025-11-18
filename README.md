@@ -145,6 +145,38 @@ print(f"Consensus contains {len(consensus)} features")
 The helper returns a fresh `Py_ConsensusMap` instance that can be exported,
 converted to a pandas DataFrame, or iterated for downstream analysis.
 
+## Protein inference and rollups
+
+Recent wrappers expose multiple entry points for inferring proteins directly
+from the Python API—either by starting from identification files, feature maps,
+or full consensus maps.
+
+```python
+from openms_python import Identifications, Py_FeatureMap, Py_ConsensusMap
+
+# 1) Run inference straight from an idXML file
+ids = Identifications.from_idxml("search_results.idXML")
+protein_summary = ids.infer_proteins(algorithm="bayesian")
+print(protein_summary.summary())
+
+# 2) Trigger inference on a feature map (assigned + unassigned peptides)
+fmap = Py_FeatureMap().load("sample.featureXML")
+proteins = fmap.infer_proteins(include_unassigned=True)
+proteins.to_idxml("sample_proteins.idXML")
+
+# 3) Operate directly on a consensus map
+consensus = Py_ConsensusMap().load("merged.consensusXML")
+consensus.infer_proteins(algorithm="basic")
+
+# Optionally compute quantitative protein ratios in place
+consensus.infer_protein_quantities(reference_map=1)
+consensus.store("merged_with_proteins.consensusXML")
+```
+
+All helpers share the same ergonomic parameter handling, accept native
+`pyopenms` parameters (`oms.Param`) or plain dictionaries, and return
+`Identifications` or the map instance itself for easy method chaining.
+
 ## Identification performance showcase
 
 Looking for a larger end-to-end example? `tests/test_idperformance.py` ships with
