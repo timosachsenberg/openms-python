@@ -115,6 +115,36 @@ for pep in matches:
 high_conf.to_idxml("curated_results.idXML")
 ```
 
+## Consensus alignment and linking
+
+Multiple `FeatureMap` runs can be aligned and converted into a single
+`ConsensusMap` directly from Python. The `Py_ConsensusMap.align_and_link`
+helper performs three steps:
+
+1. Copies the incoming feature maps to avoid mutating your data
+2. Aligns the feature maps with your choice of OpenMS alignment algorithm
+3. Links the aligned runs using `FeatureGroupingAlgorithmQT`
+
+```python
+from openms_python import Py_FeatureMap, Py_ConsensusMap
+
+feature_maps = [
+    Py_FeatureMap.from_dataframe(run_a_df),
+    Py_FeatureMap.from_dataframe(run_b_df),
+]
+
+consensus = Py_ConsensusMap.align_and_link(
+    feature_maps,
+    alignment_method="pose_clustering",  # or "identification" / "identity"
+    alignment_params={"max_rt_shift": 15.0},
+)
+
+print(f"Consensus contains {len(consensus)} features")
+```
+
+The helper returns a fresh `Py_ConsensusMap` instance that can be exported,
+converted to a pandas DataFrame, or iterated for downstream analysis.
+
 ### Iterate over containers and metadata
 
 All sequence-like wrappers (feature maps, consensus maps, identification containers,
