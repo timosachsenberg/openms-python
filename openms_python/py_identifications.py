@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, TYPE_CHECKING
 
 import pyopenms as oms
 
 from ._io_utils import ensure_allowed_suffix, IDENTIFICATION_EXTENSIONS
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from .py_consensusmap import Py_ConsensusMap
 
 
 class ProteinIdentifications:
@@ -246,6 +249,82 @@ class Identifications:
         kept_proteins = [entry for entry in proteins if _extract_q_value(entry, qvalue_keys, False) <= threshold]
         return Identifications(kept_proteins, self.peptides.copy())
 
+    def infer_proteins(
+        self,
+        *,
+        algorithm: str = "basic",
+        params: Optional[Union[oms.Param, Dict[str, Union[int, float, str]]]] = None,
+        consensus_map: Optional[Union["Py_ConsensusMap", oms.ConsensusMap]] = None,
+        include_unassigned: bool = False,
+        greedy_group_resolution: bool = True,
+        experimental_design: Optional[oms.ExperimentalDesign] = None,
+    ) -> "Identifications":
+        """Run a protein inference algorithm and return the updated identifications.
+
+        Parameters
+        ----------
+        algorithm:
+            Name of the inference algorithm to run. Supported values are
+            ``"basic"`` and ``"bayesian"``.
+        params:
+            Optional parameter dictionary or :class:`pyopenms.Param` applied to
+            the underlying OpenMS algorithm.
+        consensus_map:
+            When provided, inference is performed on identifications attached to
+            this :class:`Py_ConsensusMap` / :class:`pyopenms.ConsensusMap`
+            instead of the peptide list.
+        include_unassigned:
+            Controls whether features without identifications should be
+            considered when running the basic inference on a consensus map.
+        greedy_group_resolution:
+            Passed to Epifany (the Bayesian implementation) to control how
+            indistinguishable protein groups are resolved.
+        experimental_design:
+            Optional :class:`pyopenms.ExperimentalDesign` forwarded to the
+            Bayesian algorithm for replicate-aware inference.
+        """
+
+        algorithm = algorithm.lower()
+        peptides = [oms.PeptideIdentification(entry) for entry in self.peptides.native]
+        proteins = [oms.ProteinIdentification(entry) for entry in self.proteins.native]
+
+        if algorithm == "basic":
+            runner = oms.BasicProteinInferenceAlgorithm()
+            _apply_algorithm_params(runner, params)
+            if consensus_map is not None:
+                if not proteins:
+                    raise ValueError("Protein inference requires at least one protein identification")
+                native_map = _coerce_consensus_map(consensus_map)
+                runner.run(native_map, proteins[0], bool(include_unassigned))
+            else:
+                runner.run(peptides, proteins)
+            return Identifications(proteins, peptides)
+
+        if algorithm == "bayesian":
+            runner = oms.BayesianProteinInferenceAlgorithm()
+            _apply_algorithm_params(runner, params)
+            if consensus_map is not None:
+                native_map = _coerce_consensus_map(consensus_map)
+                if experimental_design is not None:
+                    runner.inferPosteriorProbabilities(native_map, bool(greedy_group_resolution), experimental_design)
+                else:
+                    runner.inferPosteriorProbabilities(native_map, bool(greedy_group_resolution))
+                return Identifications(proteins, peptides)
+
+            if not proteins:
+                raise ValueError("Protein inference requires at least one protein identification")
+            if experimental_design is not None:
+                runner.inferPosteriorProbabilities(proteins, peptides, bool(greedy_group_resolution), experimental_design)
+            else:
+                runner.inferPosteriorProbabilities(proteins, peptides, bool(greedy_group_resolution))
+            return Identifications(proteins, peptides)
+
+        raise ValueError(
+            "Unknown protein inference algorithm '{algorithm}'. Supported values are 'basic' and 'bayesian'.".format(
+                algorithm=algorithm
+            )
+        )
+
     def summary(self) -> dict:
         """Return basic counts about the contained identifications."""
 
@@ -345,3 +424,29 @@ def _target_decoy_label(entry, hit, is_peptide: bool) -> Optional[str]:
     if entry.metaValueExists("target_decoy"):
         return str(entry.getMetaValue("target_decoy")).lower()
     return None
+
+
+def _apply_algorithm_params(algorithm, params: Optional[Union[oms.Param, Dict[str, Union[int, float, str]]]]) -> None:
+    if params is None:
+        return
+    if isinstance(params, oms.Param):
+        algorithm.setParameters(oms.Param(params))
+        return
+    param_obj = algorithm.getParameters()
+    for key, value in params.items():
+        param_obj.setValue(key, value)
+    algorithm.setParameters(param_obj)
+
+
+def _coerce_consensus_map(
+    consensus_map: Union["Py_ConsensusMap", oms.ConsensusMap]
+) -> oms.ConsensusMap:
+    if isinstance(consensus_map, oms.ConsensusMap):
+        return consensus_map
+    from .py_consensusmap import Py_ConsensusMap  # Local import to avoid circular dependency
+
+    if isinstance(consensus_map, Py_ConsensusMap):
+        return consensus_map.native
+    raise TypeError(
+        "consensus_map must be a Py_ConsensusMap or pyopenms.ConsensusMap instance"
+    )

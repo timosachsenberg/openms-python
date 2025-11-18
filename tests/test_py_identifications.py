@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pyopenms as oms
+import pytest
 
 from openms_python.py_identifications import (
     Identifications,
@@ -119,3 +120,20 @@ def test_identifications_roundtrip_and_helpers(tmp_path: Path) -> None:
 
     filtered_ids = loaded.filter_peptides_by_score(4.0)
     assert len(filtered_ids.peptide_identifications) == 1
+
+
+def test_identifications_basic_protein_inference() -> None:
+    proteins = ProteinIdentifications([_protein("run", "P10")])
+    peptides = PeptideIdentifications(
+        [
+            _peptide("run", "PEPA", 12.0, accessions=("P10",)),
+            _peptide("run", "PEPB", 25.0, accessions=("P10",)),
+        ]
+    )
+
+    inferred = Identifications(proteins, peptides).infer_proteins(algorithm="basic")
+
+    assert inferred.protein_identifications[0].getHits()[0].getScore() == pytest.approx(25.0)
+
+    with pytest.raises(ValueError):
+        Identifications(proteins, peptides).infer_proteins(algorithm="does_not_exist")
